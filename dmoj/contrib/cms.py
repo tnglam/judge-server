@@ -26,8 +26,8 @@ class ContribModule(DefaultContribModule):
             if extended_feedback.find(std_output) != -1:
                 translate_feedback = translate
                 extended_feedback = extended_feedback.replace(std_output, '')
-        
-        # Now if the extended_feedback has nothing left then we set it to None 
+
+        # Now if the extended_feedback has nothing left then we set it to None
         # so that the client will not display it
         if len(extended_feedback.strip()) == 0:
             extended_feedback = None
