@@ -15,6 +15,7 @@ from typing import List, Optional, TYPE_CHECKING, Tuple
 from dmoj import sysinfo
 from dmoj.judgeenv import get_runtime_versions, get_supported_problems_and_mtimes
 from dmoj.result import Result
+from dmoj.utils.check_sync import check_sync
 from dmoj.utils.unicode import utf8bytes, utf8text
 
 if TYPE_CHECKING:
@@ -247,6 +248,8 @@ class PacketManager:
         name = packet['name']
         if name == 'ping':
             self.ping_packet(packet['when'])
+        elif name == 'check-sync':
+            self.on_check_sync(packet['problem-id'])
         elif name == 'get-current-submission':
             self.current_submission_packet()
         elif name == 'submission-request':
@@ -370,6 +373,15 @@ class PacketManager:
             key, value = fn()
             data[key] = value
         self._send_packet(data)
+
+    def on_check_sync(self, problem):
+        respone = {'name': 'check-sync-reponse', 'problem': problem}
+        try:
+            data = check_sync(problem)
+            respone['hash'] = str(data)
+        except Exception as e:
+            respone['error'] = str(e)
+        self._send_packet(respone)
 
     def submission_acknowledged_packet(self, sub_id: int):
         self._send_packet({'name': 'submission-acknowledged', 'submission-id': sub_id})
