@@ -194,6 +194,7 @@ sys_madvise: int
 sys_mbind: int
 sys_membarrier: int
 sys_memfd_create: int
+sys_memfd_secret: int
 sys_migrate_pages: int
 sys_mincore: int
 sys_mkdir: int
@@ -281,7 +282,7 @@ sys_pwritev: int
 sys_pwritev2: int
 sys_query_module: int
 sys_quotactl: int
-sys_quotactl_path: int
+sys_quotactl_fd: int
 sys_read: int
 sys_readahead: int
 sys_readdir: int
