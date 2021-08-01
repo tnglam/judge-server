@@ -150,6 +150,7 @@ def load_env(cli=False, testsuite=False):  # pragma: no cover
 
         problem_dirs = ['/problems']
 
+    print(api_listen)
     model_file = os.path.expanduser(args.config)
     try:
         with open(model_file) as init_file:
