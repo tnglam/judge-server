@@ -13,6 +13,10 @@ def mktemp(data):
     return tmp
 
 
+def mkdtemp():
+    return tempfile.TemporaryDirectory()
+
+
 def compile_with_auxiliary_files(filenames, flags=[], lang=None, compiler_time_limit=None, unbuffered=False):
     from dmoj.executors import executors
     from dmoj.executors.compiled_executor import CompiledExecutor
