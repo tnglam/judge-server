@@ -77,12 +77,19 @@ jobs:
           export PYTHONUNBUFFERED=1
           export LANG=C.UTF-8
           export PYTHONIOENCODING=utf8
+
           cd /code
           export PYTHON="/code/python${{ matrix.python-version }}/bin/python${{ matrix.python-version }}"
           "$PYTHON" -m pip install --upgrade pip wheel
           "$PYTHON" -m pip install cython coverage
           "$PYTHON" -m pip install -e .[test]
+
           chmod o+w .
+
+          curl --location -o scratch-run.zip $(curl -s https://api.github.com/repos/VNOI-Admin/scratch-run/releases/latest | grep -o -m 1 "https://github\.com.*.*linux_amd64\.zip")
+          unzip scratch-run.zip
+          mv scratch-run /usr/bin/scratch-run
+
           runuser -u judge -w PATH /code/run-su
           EOF
 

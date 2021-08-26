@@ -1,6 +1,17 @@
 FROM dmoj/runtimes-tier2
 
 ARG TAG=master
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends unzip && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install scratch interpreter
+RUN curl --location -o scratch-run.zip $(curl -s https://api.github.com/repos/VNOI-Admin/scratch-run/releases/latest | grep -o -m 1 "https://github\.com.*.*linux_amd64\.zip") && \
+	unzip scratch-run.zip && \
+	mv scratch-run /usr/bin/scratch-run && \
+	rm scratch-run.zip
+
 RUN mkdir /judge /problems && cd /judge && \
 	curl -L https://github.com/VNOI-Admin/judge-server/archive/"${TAG}".tar.gz | tar -xz --strip-components=1 && \
 	pip3 install -e . && \
