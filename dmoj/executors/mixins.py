@@ -23,7 +23,7 @@ BASE_FILESYSTEM = [
     '/tmp$',
     '/$',
 ]
-BASE_WRITE_FILESYSTEM = ['/dev/stdout$', '/dev/stderr$', '/dev/null$', '/tmp/fifo_([a-z0-9_]{8})/']
+BASE_WRITE_FILESYSTEM = ['/dev/stdout$', '/dev/stderr$', '/dev/null$']
 
 if 'freebsd' in sys.platform:
     BASE_FILESYSTEM += [r'/etc/s?pwd\.db$', '/dev/hv_tsc$']

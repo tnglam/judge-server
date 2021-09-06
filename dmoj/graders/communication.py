@@ -102,7 +102,10 @@ class CommunicationGrader(StandardGrader):
             os.chmod(self._fifo_user_to_manager[i], 0o666)
             os.chmod(self._fifo_manager_to_user[i], 0o666)
 
-        # Create manager processes
+        # Allow manager to write to FIFOs
+        self.manager_binary.write_fs += self._fifo_dir
+
+        # Create manager process
         manager_args = []
         for i in indices:
             manager_args += [shlex.quote(self._fifo_user_to_manager[i]), shlex.quote(self._fifo_manager_to_user[i])]
