@@ -7,6 +7,7 @@ import tempfile
 import uuid
 
 from dmoj.contrib import contrib_modules
+from dmoj.cptbox.filesystem_policies import RecursiveDir
 from dmoj.error import InternalError
 from dmoj.executors import executors
 from dmoj.graders.standard import StandardGrader
@@ -103,7 +104,7 @@ class CommunicationGrader(StandardGrader):
             os.chmod(self._fifo_manager_to_user[i], 0o666)
 
         # Allow manager to write to FIFOs
-        self.manager_binary.write_fs += self._fifo_dir
+        self.manager_binary.write_fs += [RecursiveDir(_dir) for _dir in self._fifo_dir]
 
         # Create manager process
         manager_args = []
