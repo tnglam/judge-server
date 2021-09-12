@@ -1,4 +1,6 @@
+#define _DEFAULT_SOURCE
 #define _BSD_SOURCE
+
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -50,11 +52,6 @@ void pt_debugger::tid_reset(pid_t tid) {
 
 void pt_debugger::settid(pid_t tid) {
     this->tid = tid;
-    if (!process->use_seccomp()) {
-        // All seccomp syscall events are enter events
-        if (!syscall_.count(tid)) syscall_[tid] = 0;
-        syscall_[tid] ^= 1;
-    }
 }
 #endif
 
@@ -109,6 +106,17 @@ int pt_debugger::post_syscall() {
     }
     return 0;
 }
+
+#if !PTBOX_FREEBSD
+long pt_debugger::error() {
+    long res = result();
+    return res >= -4096 && res < 0 ? -res : 0;
+}
+
+void pt_debugger::error(long value) {
+    result(-value);
+}
+#endif
 
 #if PTBOX_FREEBSD
 typedef int ptrace_read_t;

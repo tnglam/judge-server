@@ -4,8 +4,10 @@ import re
 import subprocess
 import sys
 from collections import deque
+from pathlib import Path, PurePath
 from typing import Optional
 
+from dmoj.cptbox.filesystem_policies import ExactDir, ExactFile, RecursiveDir
 from dmoj.error import CompileError, InternalError
 from dmoj.executors.compiled_executor import CompiledExecutor
 from dmoj.executors.mixins import SingleDigitVersionMixin
@@ -42,8 +44,11 @@ def handle_procctl(debugger):
     P_PID = 0
     PROC_STACKGAP_CTL = 17
     PROC_STACKGAP_STATUS = 18
-    return (debugger.arg0 == P_PID and debugger.arg1 == debugger.pid and
-            debugger.arg2 in (PROC_STACKGAP_CTL, PROC_STACKGAP_STATUS))
+    return (
+        debugger.arg0 == P_PID
+        and debugger.arg1 == debugger.pid
+        and debugger.arg2 in (PROC_STACKGAP_CTL, PROC_STACKGAP_STATUS)
+    )
 
 
 class JavaExecutor(SingleDigitVersionMixin, CompiledExecutor):
@@ -81,10 +86,18 @@ class JavaExecutor(SingleDigitVersionMixin, CompiledExecutor):
         return self.get_vm()
 
     def get_fs(self):
-        return super().get_fs() + [self._agent_file]
+        fs = (
+            super().get_fs()
+            + [ExactFile(self._agent_file)]
+            + [ExactDir(str(parent)) for parent in PurePath(self._agent_file).parents]
+        )
+        vm_config = Path(self.get_vm()).parent.parent / 'lib' / 'jvm.cfg'
+        if vm_config.is_symlink():
+            fs += [RecursiveDir(os.path.dirname(os.path.realpath(vm_config)))]
+        return fs
 
     def get_write_fs(self):
-        return super().get_write_fs() + [os.path.join(self._dir, 'submission_jvm_crash.log')]
+        return super().get_write_fs() + [ExactFile(os.path.join(self._dir, 'submission_jvm_crash.log'))]
 
     def get_agent_flag(self):
         agent_flag = '-javaagent:%s=policy:%s' % (self._agent_file, self._policy_file)
@@ -127,11 +140,11 @@ class JavaExecutor(SingleDigitVersionMixin, CompiledExecutor):
                 pass
 
         if b'Error: Main method not found in class' in stderr:
-            exception = "public static void main(String[] args) not found"
+            exception = 'public static void main(String[] args) not found'
         else:
             match = deque(reexception.finditer(utf8text(stderr, 'replace')), maxlen=1)
             if not match:
-                exception = "abnormal termination"  # Probably exited without calling shutdown hooks
+                exception = 'abnormal termination'  # Probably exited without calling shutdown hooks
             else:
                 exception = match[0].group(1).split(':')[0]
 
@@ -201,7 +214,7 @@ class JavaExecutor(SingleDigitVersionMixin, CompiledExecutor):
     def unravel_java(cls, path):
         with open(path, 'rb') as f:
             if f.read(2) != '#!':
-                return path
+                return os.path.realpath(path)
 
         with open(os.devnull, 'w') as devnull:
             process = subprocess.Popen(['bash', '-x', path, '-version'], stdout=devnull, stderr=subprocess.PIPE)
