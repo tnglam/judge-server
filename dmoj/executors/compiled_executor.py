@@ -27,7 +27,6 @@ from .base_executor import BaseExecutor
 # `create_files` and `compile` will not be run, and `_executable` will be loaded
 # from the cache.
 class _CompiledExecutorMeta(abc.ABCMeta):
-
     def __call__(self, *args, **kwargs) -> 'CompiledExecutor':
         is_cached: bool = kwargs.pop('cached', False)
         if is_cached:
@@ -41,7 +40,7 @@ class _CompiledExecutorMeta(abc.ABCMeta):
             cache_key_material = utf8bytes(obj.__class__.__name__ + obj.__module__) + obj.get_binary_cache_key()
             cache_key = hashlib.sha384(cache_key_material).hexdigest()
 
-            cache_file_path = os.path.join(tempfile.gettempdir(), cache_key + ".txt")
+            cache_file_path = os.path.join(tempfile.gettempdir(), cache_key + '.txt')
             if os.path.isfile(cache_file_path):
                 executor = open(cache_file_path).read().strip().split('\n')
                 assert len(executor) == 2
@@ -55,7 +54,7 @@ class _CompiledExecutorMeta(abc.ABCMeta):
         obj.compile()
 
         if is_cached:
-            cache_file_path = os.path.join(tempfile.gettempdir(), cache_key + ".txt")
+            cache_file_path = os.path.join(tempfile.gettempdir(), cache_key + '.txt')
             open(cache_file_path, 'w').write('\n'.join([str(obj._executable), str(obj._dir)]))
 
         return obj

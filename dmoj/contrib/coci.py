@@ -14,7 +14,9 @@ class ContribModule(TestlibContribModule):
         return '{input_file} {answer_file}'
 
     @classmethod
-    def parse_return_code(cls, proc, executor, point_value, time_limit, memory_limit, feedback, extended_feedback, name, stderr):
+    def parse_return_code(
+        cls, proc, executor, point_value, time_limit, memory_limit, feedback, extended_feedback, name, stderr
+    ):
         if proc.returncode == cls.PARTIAL:
             match = cls.repartial.search(stderr)
             if not match:

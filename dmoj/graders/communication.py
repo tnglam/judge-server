@@ -27,7 +27,7 @@ def merge_results(first_result, second_result):
     Based on https://github.com/cms-dev/cms/blob/v1.4/cms/grading/steps/stats.py#L70-L125
     """
     if second_result is None:
-        raise InternalError("The second result cannot be None")
+        raise InternalError('The second result cannot be None')
     if first_result is None:
         return second_result
 
@@ -93,8 +93,8 @@ class CommunicationGrader(StandardGrader):
 
         # Create FIFOs for communication between manager and user processes
         self._fifo_dir = [tempfile.mkdtemp(prefix='fifo_') for i in indices]
-        self._fifo_user_to_manager = [os.path.join(self._fifo_dir[i], "u%d_to_m" % i) for i in indices]
-        self._fifo_manager_to_user = [os.path.join(self._fifo_dir[i], "m_to_u%d" % i) for i in indices]
+        self._fifo_user_to_manager = [os.path.join(self._fifo_dir[i], 'u%d_to_m' % i) for i in indices]
+        self._fifo_manager_to_user = [os.path.join(self._fifo_dir[i], 'm_to_u%d' % i) for i in indices]
         for i in indices:
             os.mkfifo(self._fifo_user_to_manager[i])
             os.mkfifo(self._fifo_manager_to_user[i])
@@ -180,7 +180,10 @@ class CommunicationGrader(StandardGrader):
             aux_sources[signature_data['header']] = header
             entry = entry_point
             return executors[self.language].Executor(
-                self.problem.id, entry, aux_sources=aux_sources, defines=['-DSIGNATURE_GRADER'],
+                self.problem.id,
+                entry,
+                aux_sources=aux_sources,
+                defines=['-DSIGNATURE_GRADER'],
             )
         else:
             raise InternalError('no valid runtime for signature grading %s found' % self.language)
@@ -197,5 +200,9 @@ class CommunicationGrader(StandardGrader):
         lang = self.handler_data.manager.lang
         compiler_time_limit = self.handler_data.manager.compiler_time_limit
         return compile_with_auxiliary_files(
-            filenames, flags, lang, compiler_time_limit, unbuffered,
+            filenames,
+            flags,
+            lang,
+            compiler_time_limit,
+            unbuffered,
         )

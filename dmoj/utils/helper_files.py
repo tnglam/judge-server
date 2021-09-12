@@ -1,7 +1,8 @@
 import os
-import requests
 import signal
 import tempfile
+
+import requests
 
 from dmoj.cptbox.filesystem_policies import RecursiveDir
 from dmoj.error import InternalError
