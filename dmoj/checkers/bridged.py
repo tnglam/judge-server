@@ -6,7 +6,7 @@ from dmoj.contrib import contrib_modules
 from dmoj.error import InternalError
 from dmoj.judgeenv import env, get_problem_root
 from dmoj.result import CheckerResult
-from dmoj.utils.helper_files import compile_with_auxiliary_files, mktemp, mkdtemp
+from dmoj.utils.helper_files import compile_with_auxiliary_files, mkdtemp, mktemp
 from dmoj.utils.unicode import utf8text
 
 
@@ -75,7 +75,11 @@ def check(
                 f.write(process_output)
 
             process = executor.launch(
-                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, memory=memory_limit, time=time_limit,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                memory=memory_limit,
+                time=time_limit,
             )
 
             proc_output, error = process.communicate(input='\n'.join([test_data_folder, user_output_folder]).encode())
@@ -103,7 +107,7 @@ def check(
             )
         )
         process = executor.launch(
-            *checker_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, memory=memory_limit, time=time_limit,
+            *checker_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, memory=memory_limit, time=time_limit
         )
 
         proc_output, error = process.communicate()

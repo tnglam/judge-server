@@ -16,6 +16,7 @@ class BridgedInteractiveGrader(StandardGrader):
         self.handler_data = self.problem.config.interactive
         self.interactor_binary = self._generate_interactor_binary()
         self.contrib_type = self.handler_data.get('type', 'default')
+
         if self.contrib_type not in contrib_modules:
             raise InternalError('%s is not a valid contrib module' % self.contrib_type)
 
@@ -102,5 +103,5 @@ class BridgedInteractiveGrader(StandardGrader):
         flags = self.handler_data.get('flags', [])
         unbuffered = self.handler_data.get('unbuffered', True)
         return compile_with_auxiliary_files(
-            filenames, flags, self.handler_data.lang, self.handler_data.compiler_time_limit, unbuffered,
+            filenames, flags, self.handler_data.lang, self.handler_data.compiler_time_limit, unbuffered
         )

@@ -4,9 +4,6 @@ import subprocess
 from dmoj.executors.java_executor import JavaExecutor
 from dmoj.utils.unicode import utf8text
 
-with open(os.path.join(os.path.dirname(__file__), 'groovy-security.policy')) as policy_file:
-    policy = policy_file.read()
-
 
 class Executor(JavaExecutor):
     name = 'GROOVY'
@@ -14,11 +11,10 @@ class Executor(JavaExecutor):
 
     compiler = 'groovyc'
     vm = 'groovy_vm'
-    security_policy = policy
 
-    test_program = '''\
+    test_program = """\
 println System.in.newReader().readLine()
-'''
+"""
 
     def create_files(self, problem_id, source_code, *args, **kwargs):
         super().create_files(problem_id, source_code, *args, **kwargs)

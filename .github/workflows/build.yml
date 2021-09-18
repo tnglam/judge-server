@@ -5,13 +5,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v1
-    - name: Set up Python 3.7
+    - name: Set up Python 3.9
       uses: actions/setup-python@v1
       with:
-        python-version: 3.7
+        python-version: 3.9
     - name: Install Black and Flake8
       run: |
-        pip install black==19.3b0 flake8 flake8-future-import flake8-logging-format
+        pip install black==21.8b0 flake8 flake8-future-import flake8-logging-format flake8-import-order flake8-quotes flake8-black
     - name: Run Flake8
       run: |
         black --version
@@ -21,10 +21,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v1
-    - name: Set up Python 3.7
+    - name: Set up Python 3.9
       uses: actions/setup-python@v1
       with:
-        python-version: 3.7
+        python-version: 3.9
     - name: Install dependencies and mypy
       run: |
         pip install cython mypy types-termcolor types-requests types-PyYAML
@@ -37,10 +37,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v1
-    - name: Set up Python 3.7
+    - name: Set up Python 3.9
       uses: actions/setup-python@v1
       with:
-        python-version: 3.7
+        python-version: 3.9
     - name: Install build dependencies
       run: pip install cython
     - name: Create sdist
@@ -56,12 +56,6 @@ jobs:
     strategy:
       matrix:
         python-version: [ 3.6, 3.7, 3.8, 3.9 ]
-        sandbox: [ seccomp ]
-        include:
-          - python-version: 3.6
-            sandbox: ptrace
-          - python-version: 3.9
-            sandbox: ptrace
     steps:
       - uses: actions/checkout@v2
       - name: Download docker image
@@ -115,7 +109,7 @@ jobs:
           mkdir -p "$HOME/docker-cache/pip"
           sudo chown root:root -R "$HOME/docker-cache"
       - name: Execute tests in docker
-        run: docker run -e PYTHON_VERSION="${{ matrix.python-version }}" -e DMOJ_USE_SECCOMP="$([ ${{ matrix.sandbox }} = seccomp ] && echo yes || echo no)" -v "$(pwd):/code" -v "$HOME/docker-cache:/root/.cache" --cap-add=SYS_PTRACE dmoj/runtimes-tier3
+        run: docker run -e PYTHON_VERSION="${{ matrix.python-version }}" -v "$(pwd):/code" -v "$HOME/docker-cache:/root/.cache" --cap-add=SYS_PTRACE dmoj/runtimes-tier3
       - name: Upload coverage data
         uses: codecov/codecov-action@v1
       - name: Prepare cache for storage

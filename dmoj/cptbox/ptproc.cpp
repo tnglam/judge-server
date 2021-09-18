@@ -1,3 +1,4 @@
+#define _DEFAULT_SOURCE
 #define _BSD_SOURCE
 
 #include <errno.h>
@@ -95,15 +96,6 @@ int pt_process::protection_fault(int syscall, int type) {
     return PTBOX_EXIT_PROTECTION;
 }
 
-bool pt_process::use_seccomp(bool enabled) {
-    if (pid) {
-        // Do not allow updates after the process is spawned.
-        return false;
-    }
-    _use_seccomp = PTBOX_SECCOMP && enabled;
-    return true;
-}
-
 int pt_process::monitor() {
     bool in_syscall = false, first = true, spawned = false;
     struct timespec start, end, delta;
@@ -121,19 +113,13 @@ int pt_process::monitor() {
     while (true) {
         clock_gettime(CLOCK_MONOTONIC, &start);
 
-#ifdef WSL1
-        // WSL1 currently doesn't support waiting on process groups.
-        // Hence, we must assume there is only one subprocess at all times.
-        // This assumption is valid for normal case of DMOJ usage.
-        pid = wait4(-1, &status, __WALL, &_rusage);
-#else
         pid = wait4(-pgid, &status, __WALL, &_rusage);
-#endif
 
         clock_gettime(CLOCK_MONOTONIC, &end);
         timespec_sub(&end, &start, &delta);
         timespec_add(&exec_time, &delta, &exec_time);
         int signal = 0;
+        bool trap_next_syscall_event = _trace_syscalls && PTBOX_FREEBSD;
 
         //printf("pid: %d (%d)\n", pid, this->pid);
 
@@ -173,10 +159,7 @@ int pt_process::monitor() {
 #else
             // This is right after SIGSTOP is received:
             ptrace(PTRACE_SETOPTIONS, pid, NULL,
-                   PTRACE_O_TRACEEXIT | (_use_seccomp ? PTRACE_O_TRACESECCOMP : PTRACE_O_TRACESYSGOOD) |
-#ifdef PTRACE_O_EXITKILL // Kill all sandboxed process automatically when process exits.
-                   PTRACE_O_EXITKILL |
-#endif
+                   PTRACE_O_TRACEEXIT | PTRACE_O_TRACESECCOMP | PTRACE_O_TRACESYSGOOD | PTRACE_O_EXITKILL |
                    PTRACE_O_TRACECLONE | PTRACE_O_TRACEFORK | PTRACE_O_TRACEVFORK);
 #endif
             // We now set the process group to the actual pgid.
@@ -193,7 +176,7 @@ int pt_process::monitor() {
             debugger->setpid(pid);
             debugger->update_syscall(&lwpi);
 #else
-        if (_use_seccomp ? WSTOPSIG(status) == SIGTRAP && (status >> 8) == (SIGTRAP | PTRACE_EVENT_SECCOMP << 8) :
+        if ((status >> 8) == (SIGTRAP | PTRACE_EVENT_SECCOMP << 8) ||
                 WSTOPSIG(status) == (0x80 | SIGTRAP)) {
             debugger->settid(pid);
 #endif
@@ -226,7 +209,7 @@ int pt_process::monitor() {
             in_syscall = lwpi.pl_flags & PL_FLAG_SCE;
             debugger->_bsd_in_syscall = in_syscall;
 #else
-            in_syscall = debugger->is_enter();
+            in_syscall = (status >> 8) == (SIGTRAP | PTRACE_EVENT_SECCOMP << 8);
 #endif
 
             //printf("%d: %s syscall %d\n", pid, in_syscall ? "Enter" : "Exit", syscall);
@@ -274,12 +257,17 @@ int pt_process::monitor() {
                 }
             }
 
-            // Syscall has "ended". What we do here varies a bit between if we're using seccomp
-            // or not, since with seccomp we will have no return event.
-            if ((_use_seccomp || !in_syscall) && debugger->on_return_.count(pid)) {
-                std::pair<pt_syscall_return_callback, void*> callback = debugger->on_return_[pid];
-                callback.first(callback.second, syscall);
-                debugger->on_return_.erase(pid);
+            if (debugger->on_return_.count(pid)) {
+                if (in_syscall) {
+                    // When using seccomp, we'll need to specifically enable tracing after entering
+                    // to get the corresponding syscall-exit-stop, which we will use to run on_return.
+                    trap_next_syscall_event = true;
+                } else {
+                    // Fire the on_return handler if we are in a syscall-exit-stop.
+                    std::pair<pt_syscall_return_callback, void*> callback = debugger->on_return_[pid];
+                    callback.first(callback.second, pid, syscall);
+                    debugger->on_return_.erase(pid);
+                }
             }
 
             if ((err = debugger->post_syscall()) != 0) {
@@ -343,9 +331,10 @@ resume_process:
         // work for naught. Like abort(), it catches the signal, prints something (^Z?) and then resends it.
         // Doing this prevents a second SIGSTOP from being dispatched to our event handler above. ***
 #if PTBOX_FREEBSD
-        ptrace(_trace_syscalls ? PT_SYSCALL : PT_CONTINUE, pid, (caddr_t) 1, first ? 0 : signal);
+        ptrace(trap_next_syscall_event ? PT_SYSCALL : PT_CONTINUE, pid, (caddr_t) 1, first ? 0 : signal);
 #else
-        ptrace(_trace_syscalls && !_use_seccomp ? PTRACE_SYSCALL : PTRACE_CONT, pid, NULL, first ? NULL : (void*) signal);
+        ptrace(trap_next_syscall_event ? PTRACE_SYSCALL : PTRACE_CONT, pid, NULL,
+               first ? NULL : (void*) (intptr_t) signal);
 #endif
         first = false;
     }

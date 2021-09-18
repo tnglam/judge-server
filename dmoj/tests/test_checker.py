@@ -42,8 +42,8 @@ class CheckerTest(unittest.TestCase):
         self.assert_fail(check, b'a b\\b', b'a b b')
 
         # Checkers should handle mixed bytes/str
-        self.assert_pass(check, b'a', u'a')
-        self.assert_fail(check, b'a', u'b')
+        self.assert_pass(check, b'a', 'a')
+        self.assert_fail(check, b'a', 'b')
 
     def test_linecount(self):
         from dmoj.checkers.linecount import check
@@ -65,8 +65,8 @@ class CheckerTest(unittest.TestCase):
         self.assert_fail(check, b'ab', b'a b')
 
         # Checkers should handle mixed bytes/str
-        self.assert_pass(check, b'a', u'a')
-        self.assert_fail(check, b'a', u'b')
+        self.assert_pass(check, b'a', 'a')
+        self.assert_fail(check, b'a', 'b')
 
     def test_identical(self):
         from dmoj.checkers.identical import check

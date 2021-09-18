@@ -26,9 +26,9 @@ class Executor(ScriptExecutor):
     ]
     check_time = 10  # 10 seconds
     check_memory = 262144  # 256mb of RAM
-    test_program = '''\
+    test_program = """\
 https://gist.github.com/leduythuccs/c0dc83d4710e498348dc4c600a5cc209/raw/baf1d80bdf795fde02641e2b2cf4011a6b266896/test.sb3
-'''
+"""
 
     def __init__(self, problem_id, source_code, **kwargs):
         super().__init__(problem_id, source_code, **kwargs)
@@ -80,8 +80,7 @@ https://gist.github.com/leduythuccs/c0dc83d4710e498348dc4c600a5cc209/raw/baf1d80
     def create_files(self, problem_id, source_code, *args, **kwargs):
         if problem_id == self.test_name or self.meta.get('file-only', False):
             source_code = download_source_code(
-                source_code.decode().strip(),
-                1 if problem_id == self.test_name else self.meta.get('file-size-limit', 1)
+                source_code.decode().strip(), 1 if problem_id == self.test_name else self.meta.get('file-size-limit', 1)
             )
 
         super().create_files(problem_id, source_code, *args, **kwargs)

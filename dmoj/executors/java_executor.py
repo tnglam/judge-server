@@ -1,11 +1,14 @@
 import errno
+import glob
 import os
 import re
 import subprocess
 import sys
 from collections import deque
+from pathlib import Path, PurePath
 from typing import Optional
 
+from dmoj.cptbox.filesystem_policies import ExactDir, ExactFile, RecursiveDir
 from dmoj.error import CompileError, InternalError
 from dmoj.executors.compiled_executor import CompiledExecutor
 from dmoj.executors.mixins import SingleDigitVersionMixin
@@ -23,9 +26,6 @@ reexception = re.compile(r'7257b50d-e37a-4664-b1a5-b1340b4206c0: (.*?)$', re.U |
 
 JAVA_SANDBOX = os.path.abspath(os.path.join(os.path.dirname(__file__), 'java_sandbox.jar'))
 
-with open(os.path.join(os.path.dirname(__file__), 'java-security.policy'), 'r') as policy_file:
-    policy = policy_file.read()
-
 
 def find_class(source):
     source = reinline_comment.sub('', restring.sub('', recomment.sub('', source)))
@@ -42,8 +42,11 @@ def handle_procctl(debugger):
     P_PID = 0
     PROC_STACKGAP_CTL = 17
     PROC_STACKGAP_STATUS = 18
-    return (debugger.arg0 == P_PID and debugger.arg1 == debugger.pid and
-            debugger.arg2 in (PROC_STACKGAP_CTL, PROC_STACKGAP_STATUS))
+    return (
+        debugger.arg0 == P_PID
+        and debugger.arg1 == debugger.pid
+        and debugger.arg2 in (PROC_STACKGAP_CTL, PROC_STACKGAP_STATUS)
+    )
 
 
 class JavaExecutor(SingleDigitVersionMixin, CompiledExecutor):
@@ -57,7 +60,6 @@ class JavaExecutor(SingleDigitVersionMixin, CompiledExecutor):
     syscalls = ['pread64', 'clock_nanosleep', 'socketpair', ('procctl', handle_procctl), 'setrlimit', 'thr_set_name']
 
     jvm_regex: Optional[str] = None
-    security_policy = policy
 
     def __init__(self, problem_id, source_code, **kwargs):
         self._class_name = None
@@ -67,9 +69,6 @@ class JavaExecutor(SingleDigitVersionMixin, CompiledExecutor):
         super().create_files(problem_id, source_code, *args, **kwargs)
 
         self._agent_file = JAVA_SANDBOX
-        self._policy_file = self._file('security.policy')
-        with open(self._policy_file, 'w') as file:
-            file.write(self.security_policy)
 
     def get_compile_popen_kwargs(self):
         return {'executable': self.get_compiler()}
@@ -81,18 +80,25 @@ class JavaExecutor(SingleDigitVersionMixin, CompiledExecutor):
         return self.get_vm()
 
     def get_fs(self):
-        return super().get_fs() + [self._agent_file]
+        fs = (
+            super().get_fs()
+            + [ExactFile(self._agent_file)]
+            + [ExactDir(str(parent)) for parent in PurePath(self._agent_file).parents]
+        )
+        vm_parent = Path(os.path.realpath(self.get_vm())).parent.parent
+        vm_config = Path(glob.glob(f'{vm_parent}/**/jvm.cfg', recursive=True)[0])
+        if vm_config.is_symlink():
+            fs += [RecursiveDir(os.path.dirname(os.path.realpath(vm_config)))]
+        return fs
 
     def get_write_fs(self):
-        return super().get_write_fs() + [os.path.join(self._dir, 'submission_jvm_crash.log')]
+        return super().get_write_fs() + [ExactFile(os.path.join(self._dir, 'submission_jvm_crash.log'))]
 
     def get_agent_flag(self):
-        agent_flag = '-javaagent:%s=policy:%s' % (self._agent_file, self._policy_file)
-        for hint in self._hints:
-            agent_flag += ',%s' % hint
+        hints = [*self._hints]
         if self.unbuffered:
-            agent_flag += ',nobuf'
-        return agent_flag
+            hints.append('nobuf')
+        return f'-javaagent:{self._agent_file}={",".join(hints)}'
 
     def get_cmdline(self, **kwargs):
         # 128m is equivalent to 1<<27 in Thread constructor
@@ -127,11 +133,11 @@ class JavaExecutor(SingleDigitVersionMixin, CompiledExecutor):
                 pass
 
         if b'Error: Main method not found in class' in stderr:
-            exception = "public static void main(String[] args) not found"
+            exception = 'public static void main(String[] args) not found'
         else:
             match = deque(reexception.finditer(utf8text(stderr, 'replace')), maxlen=1)
             if not match:
-                exception = "abnormal termination"  # Probably exited without calling shutdown hooks
+                exception = 'abnormal termination'  # Probably exited without calling shutdown hooks
             else:
                 exception = match[0].group(1).split(':')[0]
 
@@ -201,7 +207,7 @@ class JavaExecutor(SingleDigitVersionMixin, CompiledExecutor):
     def unravel_java(cls, path):
         with open(path, 'rb') as f:
             if f.read(2) != '#!':
-                return path
+                return os.path.realpath(path)
 
         with open(os.devnull, 'w') as devnull:
             process = subprocess.Popen(['bash', '-x', path, '-version'], stdout=devnull, stderr=subprocess.PIPE)

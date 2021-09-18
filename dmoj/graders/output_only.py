@@ -5,7 +5,7 @@ from zipfile import BadZipFile, ZipFile
 from dmoj.error import CompileError
 from dmoj.graders.standard import StandardGrader
 from dmoj.result import CheckerResult, Result
-from dmoj.utils.helper_files import download_source_code, FunctionTimeout
+from dmoj.utils.helper_files import FunctionTimeout, download_source_code
 from dmoj.utils.unicode import utf8text
 
 
@@ -27,22 +27,19 @@ class OutputOnlyGrader(StandardGrader):
         try:
             info = self.zip_file.getinfo(output_name)
         except KeyError:
-            result.feedback = "`" + output_name + "` not found in zip file"
+            result.feedback = '`' + output_name + '` not found in zip file'
             result.result_flag = Result.WA
             return
 
         if info.file_size > case.config.output_limit_length:
-            result.feedback = f"Output is too long ({info.file_size} > {case.config.output_limit_length})"
+            result.feedback = f'Output is too long ({info.file_size} > {case.config.output_limit_length})'
             result.result_flag = Result.OLE
             return
 
         result.proc_output = self.zip_file.open(output_name).read()
 
     def get_zip_file(self):
-        zip_data = download_source_code(
-            utf8text(self.source).strip(),
-            self.problem.meta.get('file-size-limit', 1)
-        )
+        zip_data = download_source_code(utf8text(self.source).strip(), self.problem.meta.get('file-size-limit', 1))
         try:
             return ZipFile(BytesIO(zip_data))
         except BadZipFile as e:

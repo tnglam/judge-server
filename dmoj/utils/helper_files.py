@@ -1,8 +1,10 @@
 import os
-import requests
 import signal
 import tempfile
 
+import requests
+
+from dmoj.cptbox.filesystem_policies import RecursiveDir
 from dmoj.error import InternalError
 from dmoj.result import Result
 from dmoj.utils.os_ext import strsignal
@@ -47,7 +49,7 @@ def compile_with_auxiliary_files(filenames, flags=[], lang=None, compiler_time_l
 
     executor = executor.Executor
 
-    kwargs = {'fs': executor.fs + [tempfile.gettempdir()]}
+    kwargs = {'fs': executor.fs + [RecursiveDir(tempfile.gettempdir())]}
 
     if issubclass(executor, CompiledExecutor):
         kwargs['compiler_time_limit'] = compiler_time_limit
