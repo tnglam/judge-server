@@ -293,10 +293,10 @@ class IsolateTracer(dict):
                     normalized,
                     real,
                 )
-                return file, ACCESS_EPERM
+                return file, ACCESS_EACCES
 
         if not fs_jail.check(normalized):
-            return normalized, ACCESS_EPERM
+            return normalized, ACCESS_EACCES
 
         if normalized != real:
             proc_dir = f'/proc/{debugger.pid}'
@@ -304,14 +304,14 @@ class IsolateTracer(dict):
                 real = os.path.join('/proc/self', os.path.relpath(real, proc_dir))
 
             if not fs_jail.check(real):
-                return real, ACCESS_EPERM
+                return real, ACCESS_EACCES
 
         return real, None
 
     def get_full_path(self, debugger: Debugger, file: str, dirfd: int = AT_FDCWD) -> str:
         dirfd = (dirfd & 0x7FFFFFFF) - (dirfd & 0x80000000)
         if not file.startswith('/'):
-            dir = self._getcwd_pid(debugger.pid) if dirfd == AT_FDCWD else self._getfd_pid(debugger.pid, dirfd)
+            dir = self._getcwd_pid(debugger.tid) if dirfd == AT_FDCWD else self._getfd_pid(debugger.tid, dirfd)
             file = os.path.join(dir, file)
         file = '/' + os.path.normpath(file).lstrip('/')
         return file
