@@ -17,7 +17,7 @@ class OutputLimitExceeded(Exception):
         else:
             super().__init__(
                 'exceeded %d-byte limit on %s stream.\nFirst %d bytes of data: %s '
-                % (limit, stream, len(data), data.decode())
+                % (limit, stream, len(data), data.decode('utf-8', 'replace'))
             )
 
 
