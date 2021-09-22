@@ -6,11 +6,11 @@ import signal
 import subprocess
 import sys
 import threading
-from typing import Callable, Dict, List, Optional, Tuple, Type
+from typing import Callable, List, Mapping, Optional, Tuple, Type
 
 from dmoj.cptbox._cptbox import *
 from dmoj.cptbox.handlers import ALLOW, DISALLOW, ErrnoHandlerCallback, _CALLBACK
-from dmoj.cptbox.syscalls import SYSCALL_COUNT, by_id, sys_exit, sys_exit_group, sys_getpid, translator
+from dmoj.cptbox.syscalls import SYSCALL_COUNT, by_id, sys_execve, sys_exit, sys_exit_group, sys_getpid, translator
 from dmoj.utils.communicate import safe_communicate as _safe_communicate
 from dmoj.utils.os_ext import OOM_SCORE_ADJ_MAX, oom_score_adj
 from dmoj.utils.unicode import utf8bytes, utf8text
@@ -105,7 +105,7 @@ class TracedPopen(Process):
         stdin: Optional[int] = PIPE,
         stdout: Optional[int] = PIPE,
         stderr: Optional[int] = None,
-        env: Optional[Dict[str, str]] = None,
+        env: Optional[Mapping[str, Optional[str]]] = None,
         nproc: int = 0,
         fsize: int = 0,
         address_grace: int = 4096,
@@ -184,9 +184,9 @@ class TracedPopen(Process):
         index = _SYSCALL_INDICIES[NATIVE_ABI]
         assert index is not None
         for i in range(SYSCALL_COUNT):
-            # Ensure at least one syscall traps.
+            # Ensure at least one syscall traps, including the execve so we know the process started.
             # Otherwise, a simple assembly program could terminate without ever trapping.
-            if i in (sys_exit, sys_exit_group):
+            if i in (sys_execve, sys_exit, sys_exit_group):
                 continue
             handler = self._security.get(i, DISALLOW)
             for call in translator[i][index]:

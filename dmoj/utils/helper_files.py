@@ -1,6 +1,7 @@
 import os
 import signal
 import tempfile
+from typing import IO, List, Optional, Sequence, TYPE_CHECKING
 
 import requests
 
@@ -9,8 +10,12 @@ from dmoj.error import InternalError
 from dmoj.result import Result
 from dmoj.utils.os_ext import strsignal
 
+if TYPE_CHECKING:
+    from dmoj.cptbox import TracedPopen
+    from dmoj.executors.base_executor import BaseExecutor
 
-def mktemp(data):
+
+def mktemp(data: bytes) -> IO:
     tmp = tempfile.NamedTemporaryFile()
     tmp.write(data)
     tmp.flush()
@@ -21,7 +26,13 @@ def mkdtemp():
     return tempfile.TemporaryDirectory()
 
 
-def compile_with_auxiliary_files(filenames, flags=[], lang=None, compiler_time_limit=None, unbuffered=False):
+def compile_with_auxiliary_files(
+    filenames: Sequence[str],
+    flags: List[str] = [],
+    lang: Optional[str] = None,
+    compiler_time_limit: Optional[int] = None,
+    unbuffered: bool = False,
+) -> 'BaseExecutor':
     from dmoj.executors import executors
     from dmoj.executors.compiled_executor import CompiledExecutor
 
@@ -69,22 +80,25 @@ def compile_with_auxiliary_files(filenames, flags=[], lang=None, compiler_time_l
     return executor
 
 
-def parse_helper_file_error(proc, executor, name, stderr, time_limit, memory_limit):
+def parse_helper_file_error(
+    proc: 'TracedPopen', executor: 'BaseExecutor', name: str, stderr: bytes, time_limit: int, memory_limit: int
+) -> None:
     if proc.is_tle:
-        error = '%s timed out (> %d seconds)' % (name, time_limit)
+        error = f'{name} timed out (> {time_limit} seconds)'
     elif proc.is_mle:
-        error = '%s ran out of memory (> %s Kb)' % (name, memory_limit)
+        error = f'{name} ran out of memory (> {memory_limit} KB)'
     elif proc.protection_fault:
         syscall, callname, args, update_errno = proc.protection_fault
-        error = '%s invoked disallowed syscall %s (%s)' % (name, syscall, callname)
+        error = f'{name} invoked disallowed syscall {syscall} ({callname})'
     elif proc.returncode:
         if proc.returncode > 0:
-            error = '%s exited with nonzero code %d' % (name, proc.returncode)
+            error = f'{name} exited with nonzero code {proc.returncode}'
         else:
-            error = '%s exited with %s' % (name, strsignal(proc.signal))
+            assert proc.signal is not None
+            error = f'{name} exited with {strsignal(proc.signal)}'
         feedback = Result.get_feedback_str(stderr, proc, executor)
         if feedback:
-            error += ' with feedback %s' % feedback
+            error += f' with feedback {feedback}'
     else:
         return
 

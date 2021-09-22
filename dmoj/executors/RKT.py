@@ -6,10 +6,14 @@ class Executor(CompiledExecutor):
     ext = 'rkt'
     name = 'RKT'
     fs = [RecursiveDir('/etc/racket'), ExactFile('/etc/passwd')]
+    compiler_read_fs = [
+        RecursiveDir('/etc/racket'),
+        RecursiveDir('~/.local/share/racket'),
+    ]
 
     command = 'racket'
 
-    syscalls = ['epoll_create', 'epoll_wait']
+    syscalls = ['epoll_create', 'epoll_create1', 'epoll_wait', 'epoll_pwait']
     # Racket SIGABRTs under low-memory conditions before actually crossing the memory limit,
     # so give it a bit of headroom to be properly marked as MLE.
     data_grace = 4096

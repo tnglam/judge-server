@@ -1,13 +1,19 @@
+from dmoj.cptbox.filesystem_policies import ExactFile, RecursiveDir
 from dmoj.executors.compiled_executor import CompiledExecutor
 
 
-# Running DART normally results in unholy memory usage
-# Thankfully compiling it results in something...far more sane
+# Running Dart normally results in unholy memory usage
+# Thankfully compiling it results in something... far more sane
 class Executor(CompiledExecutor):
     ext = 'dart'
     name = 'DART'
     nproc = -1  # Dart uses a really, really large number of threads
     command = 'dart'
+    compiler_read_fs = [
+        # Dart shells out...
+        ExactFile('/bin/sh'),
+        RecursiveDir('/proc/self/fd'),
+    ]
     test_program = """
 void main() {
     print("echo: Hello, World!");
@@ -15,7 +21,16 @@ void main() {
 """
     address_grace = 128 * 1024
 
-    syscalls = ['epoll_create', 'epoll_ctl', 'epoll_wait', 'timerfd_settime', 'memfd_create', 'ftruncate']
+    syscalls = [
+        'epoll_create',
+        'epoll_create1',
+        'epoll_ctl',
+        'epoll_wait',
+        'epoll_pwait',
+        'timerfd_settime',
+        'memfd_create',
+        'ftruncate',
+    ]
 
     def get_compile_args(self):
         return [self.get_command(), '--snapshot=%s' % self.get_compiled_file(), self._code]
