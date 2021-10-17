@@ -2,12 +2,12 @@
 #include <string>
 #define UNREFERENCED_PARAMETER(p)
 #if defined(_MSC_VER)
-#	define inline __declspec(inline)
-#	pragma warning(disable: 4127)
-#	undef UNREFERENCED_PARAMETER
-#	define UNREFERENCED_PARAMETER(p) (p)
+#define inline __declspec(inline)
+#pragma warning(disable : 4127)
+#undef UNREFERENCED_PARAMETER
+#define UNREFERENCED_PARAMETER(p) (p)
 #elif !defined(__GNUC__)
-#	define inline
+#define inline
 #endif
 static inline int isline(char ch) {
     switch (ch) {
@@ -43,7 +43,7 @@ static inline void skip_spaces(const char *str, size_t *pos, size_t length) {
 
 /* Get position of the next Eoln or Eof character */
 static inline size_t get_next_Eoln(const char *str, size_t pos, size_t length) {
-    while (pos < length && !isline(str[pos])) 
+    while (pos < length && !isline(str[pos]))
         ++pos;
     return pos;
 }
@@ -68,18 +68,20 @@ inline std::string englishEnding(int x) {
 }
 const int BUFFER_SIZE = 1000;
 char BUFFER[BUFFER_SIZE + 1];  // always have a \0
-#define ACCEPTED 1
+#define ACCEPTED     1
 #define WRONG_ANSWER 0
 
 #define FMT_TO_RESULT(fmt, ...) PyOS_snprintf(BUFFER, BUFFER_SIZE, fmt, __VA_ARGS__)
-#define TO_RESULT(fmt) PyOS_snprintf(BUFFER, BUFFER_SIZE, fmt)
+#define TO_RESULT(fmt)          PyOS_snprintf(BUFFER, BUFFER_SIZE, fmt)
 
 /* compare sequence of tokens, ignore whitespace*/
 static int check_standard(const char *judge, size_t jlen, const char *process, size_t plen) {
     size_t j = 0, p = 0;
 
-    while (j < jlen && iswhite(judge[j])) ++j;
-    while (p < plen && iswhite(process[p])) ++p;
+    while (j < jlen && iswhite(judge[j]))
+        ++j;
+    while (p < plen && iswhite(process[p]))
+        ++p;
     int cnt_token = 0;
     for (;;) {
         skip_spaces(judge, &j, jlen);
@@ -106,40 +108,36 @@ static int check_standard(const char *judge, size_t jlen, const char *process, s
         }
         cnt_token += 1;
         if (j_token != p_token) {
-            FMT_TO_RESULT("%d%s token differs - expected: '%s', found: '%s'",
-                          cnt_token,
-                          englishEnding(cnt_token).c_str(),
-                          compress(j_token).c_str(),
-                          compress(p_token).c_str());
+            FMT_TO_RESULT("%d%s token differs - expected: '%s', found: '%s'", cnt_token,
+                          englishEnding(cnt_token).c_str(), compress(j_token).c_str(), compress(p_token).c_str());
             return WRONG_ANSWER;
         }
     }
 }
 
 static PyObject *checker_standard(PyObject *self, PyObject *args) {
-	PyObject *expected, *actual, *result, *check;
+    PyObject *expected, *actual, *result, *check;
 
-	UNREFERENCED_PARAMETER(self);
-	if (!PyArg_ParseTuple(args, "OO:standard", &expected, &actual))
-		return NULL;
+    UNREFERENCED_PARAMETER(self);
+    if (!PyArg_ParseTuple(args, "OO:standard", &expected, &actual))
+        return NULL;
 
-	if (!PyBytes_Check(expected) || !PyBytes_Check(actual)) {
-		PyErr_SetString(PyExc_ValueError, "expected strings");
-		return NULL;
-	}
+    if (!PyBytes_Check(expected) || !PyBytes_Check(actual)) {
+        PyErr_SetString(PyExc_ValueError, "expected strings");
+        return NULL;
+    }
 
-	Py_INCREF(expected);
-	Py_INCREF(actual);
-	Py_BEGIN_ALLOW_THREADS
-	check = check_standard(PyBytes_AsString(expected), PyBytes_Size(expected),
-							PyBytes_AsString(actual), PyBytes_Size(actual)) ?
-			Py_True : Py_False;
-	Py_END_ALLOW_THREADS
-	result = Py_BuildValue("Oy", check, BUFFER);
-	Py_DECREF(expected);
-	Py_DECREF(actual);
-	Py_INCREF(result);
-	return result;
+    Py_INCREF(expected);
+    Py_INCREF(actual);
+    Py_BEGIN_ALLOW_THREADS check = check_standard(PyBytes_AsString(expected), PyBytes_Size(expected),
+                                                  PyBytes_AsString(actual), PyBytes_Size(actual))
+                                       ? Py_True
+                                       : Py_False;
+    Py_END_ALLOW_THREADS result = Py_BuildValue("Oy", check, BUFFER);
+    Py_DECREF(expected);
+    Py_DECREF(actual);
+    Py_INCREF(result);
+    return result;
 }
 
 /* compare sequence of line, ignore whitespace*/
@@ -151,7 +149,7 @@ static int check_linebyline(const char *judge, size_t jlen, const char *process,
         skip_spaces(judge, &j, jlen);
         skip_spaces(process, &p, plen);
         if (j == jlen || p == plen) {
-             if (j == jlen && p == plen) {
+            if (j == jlen && p == plen) {
                 FMT_TO_RESULT("%d line(s), total %d token(s)", cnt_line, cnt_token);
                 return ACCEPTED;
             }
@@ -174,10 +172,12 @@ static int check_linebyline(const char *judge, size_t jlen, const char *process,
                 if (j == j_next_Eoln && p == p_next_Eoln)
                     break;
                 if (j == j_next_Eoln) {
-                    FMT_TO_RESULT("In line %d%s, participant's output has more tokens than judge's output", cnt_line, englishEnding(cnt_line).c_str());
+                    FMT_TO_RESULT("In line %d%s, participant's output has more tokens than judge's output", cnt_line,
+                                  englishEnding(cnt_line).c_str());
                 }
-                FMT_TO_RESULT("In line %d%s, participant's output has less tokens than judge's output", cnt_line, englishEnding(cnt_line).c_str());
-            return WRONG_ANSWER;
+                FMT_TO_RESULT("In line %d%s, participant's output has less tokens than judge's output", cnt_line,
+                              englishEnding(cnt_line).c_str());
+                return WRONG_ANSWER;
             }
             std::string j_token, p_token;
             while (j < j_next_Eoln && !iswhite(judge[j])) {
@@ -188,13 +188,10 @@ static int check_linebyline(const char *judge, size_t jlen, const char *process,
             }
             cnt_inline_token += 1;
             if (j_token != p_token) {
-                FMT_TO_RESULT("In line %d%s, %d%s token differs - expected: '%s', found: '%s'",
-                            cnt_line, 
-                            englishEnding(cnt_line).c_str(),
-                            cnt_inline_token,
-                            englishEnding(cnt_inline_token).c_str(),
-                            compress(j_token).c_str(),
-                            compress(p_token).c_str());
+                FMT_TO_RESULT("In line %d%s, %d%s token differs - expected: '%s', found: '%s'", cnt_line,
+                              englishEnding(cnt_line).c_str(), cnt_inline_token,
+                              englishEnding(cnt_inline_token).c_str(), compress(j_token).c_str(),
+                              compress(p_token).c_str());
                 return WRONG_ANSWER;
             }
         }
@@ -203,51 +200,39 @@ static int check_linebyline(const char *judge, size_t jlen, const char *process,
 }
 
 static PyObject *checker_linebyline(PyObject *self, PyObject *args) {
-	PyObject *expected, *actual, *result, *check;
+    PyObject *expected, *actual, *result, *check;
 
-	UNREFERENCED_PARAMETER(self);
-	if (!PyArg_ParseTuple(args, "OO:standard", &expected, &actual))
-		return NULL;
+    UNREFERENCED_PARAMETER(self);
+    if (!PyArg_ParseTuple(args, "OO:standard", &expected, &actual))
+        return NULL;
 
-	if (!PyBytes_Check(expected) || !PyBytes_Check(actual)) {
-		PyErr_SetString(PyExc_ValueError, "expected strings");
-		return NULL;
-	}
+    if (!PyBytes_Check(expected) || !PyBytes_Check(actual)) {
+        PyErr_SetString(PyExc_ValueError, "expected strings");
+        return NULL;
+    }
 
-	Py_INCREF(expected);
-	Py_INCREF(actual);
-	Py_BEGIN_ALLOW_THREADS
-	check = check_linebyline(PyBytes_AsString(expected), PyBytes_Size(expected),
-							PyBytes_AsString(actual), PyBytes_Size(actual)) ?
-			Py_True : Py_False;
-	Py_END_ALLOW_THREADS
-	result = Py_BuildValue("Oy", check, BUFFER);
-	Py_DECREF(expected);
-	Py_DECREF(actual);
-	Py_INCREF(result);
-	return result;
+    Py_INCREF(expected);
+    Py_INCREF(actual);
+    Py_BEGIN_ALLOW_THREADS check = check_linebyline(PyBytes_AsString(expected), PyBytes_Size(expected),
+                                                    PyBytes_AsString(actual), PyBytes_Size(actual))
+                                       ? Py_True
+                                       : Py_False;
+    Py_END_ALLOW_THREADS result = Py_BuildValue("Oy", check, BUFFER);
+    Py_DECREF(expected);
+    Py_DECREF(actual);
+    Py_INCREF(result);
+    return result;
 }
 
-static PyMethodDef checker_methods[] = {
-	{"standard", checker_standard, METH_VARARGS,
-	 "Standard VNOJ checker."},
-    {"linecount", checker_linebyline, METH_VARARGS,
-	 "Line by Line VNOJ checker."},
-	{NULL, NULL, 0, NULL}
-};
+static PyMethodDef checker_methods[] = { { "standard", checker_standard, METH_VARARGS, "Standard VNOJ checker." },
+                                         { "linecount", checker_linebyline, METH_VARARGS,
+                                           "Line by Line VNOJ checker." },
+                                         { NULL, NULL, 0, NULL } };
 
 static struct PyModuleDef moduledef = {
-        PyModuleDef_HEAD_INIT,
-        "_checker",
-        NULL,
-        -1,
-        checker_methods,
-        NULL,
-        NULL,
-        NULL,
-        NULL
+    PyModuleDef_HEAD_INIT, "_checker", NULL, -1, checker_methods, NULL, NULL, NULL, NULL
 };
 
 PyMODINIT_FUNC PyInit__checker(void) {
-	return PyModule_Create(&moduledef);
+    return PyModule_Create(&moduledef);
 }
