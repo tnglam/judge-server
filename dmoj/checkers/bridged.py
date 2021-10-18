@@ -88,7 +88,7 @@ def check(
             )
 
             proc_output, error = process.communicate(input='\n'.join([test_data_folder, user_output_folder]).encode())
-            proc_output = utf8text(proc_output).strip()
+            proc_output = utf8text(proc_output, 'replace').strip()
 
             return contrib_modules[type].ContribModule.parse_return_code(
                 process,
@@ -116,7 +116,7 @@ def check(
         )
 
         proc_output, error = process.communicate()
-        proc_output = utf8text(proc_output)
+        proc_output = utf8text(proc_output, 'replace')
 
         return contrib_modules[type].ContribModule.parse_return_code(
             process,
@@ -125,7 +125,7 @@ def check(
             time_limit,
             memory_limit,
             feedback=proc_output if feedback else '',
-            extended_feedback=utf8text(error) if feedback else '',
+            extended_feedback=utf8text(error, 'replace') if feedback else '',
             name='checker',
             stderr=error,
         )
