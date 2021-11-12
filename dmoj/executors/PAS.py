@@ -18,11 +18,11 @@ end.
 """
 
     def get_compile_args(self):
-        return [self.get_command(), '-Fe/dev/stderr', '-So', '-O2', self._code]
+        return [self.get_command(), '-Fe/dev/stderr', '-O2', self._code]
 
     def get_compile_output(self, process):
         output = super().get_compile_output(process)
-        return output if b'Fatal:' in output or b'Warning:' in output or b'Note:' in output else ''
+        return output if b'Fatal:' in output or b'Warning:' in output or b'Note:' in output else b''
 
     @classmethod
     def get_version_flags(cls, command):
