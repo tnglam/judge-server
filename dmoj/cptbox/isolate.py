@@ -50,6 +50,7 @@ class IsolateTracer(dict):
                 sys_openat: self.check_file_access_at('openat', is_open=True),
                 sys_open: self.check_file_access('open', 0, is_open=True),
                 sys_faccessat: self.check_file_access_at('faccessat'),
+                sys_faccessat2: self.check_file_access_at('faccessat2'),
                 sys_access: self.check_file_access('access', 0),
                 sys_readlink: self.check_file_access('readlink', 0),
                 sys_readlinkat: self.check_file_access_at('readlinkat'),
@@ -58,6 +59,7 @@ class IsolateTracer(dict):
                 sys_lstat: self.check_file_access('lstat', 0),
                 sys_lstat64: self.check_file_access('lstat64', 0),
                 sys_fstatat: self.check_file_access_at('fstatat'),
+                sys_statx: self.check_file_access_at('statx'),
                 sys_tgkill: self.do_kill,
                 sys_kill: self.do_kill,
                 sys_prctl: self.do_prctl,
@@ -158,13 +160,13 @@ class IsolateTracer(dict):
             self.update(
                 {
                     sys_mkdir: ACCESS_EPERM,
-                    sys_obreak: ALLOW,
+                    sys_break: ALLOW,
                     sys_sysarch: ALLOW,
                     sys_sysctl: ALLOW,  # TODO: More strict?
+                    sys_sysctlbyname: ALLOW,  # TODO: More strict?
                     sys_issetugid: ALLOW,
                     sys_rtprio_thread: ALLOW,  # EPERMs when invalid anyway
                     sys_umtx_op: ALLOW,  # http://fxr.watson.org/fxr/source/kern/kern_umtx.c?v=FREEBSD60#L720
-                    sys_nosys: ALLOW,  # what?? TODO: this shouldn't really exist, so why is Python calling it?
                     sys_getcontext: ALLOW,
                     sys_setcontext: ALLOW,
                     sys_pread: ALLOW,
@@ -175,8 +177,6 @@ class IsolateTracer(dict):
                     sys_thr_exit: ALLOW,
                     sys_thr_kill: ALLOW,
                     sys_thr_self: ALLOW,
-                    sys__mmap: ALLOW,
-                    sys___mmap: ALLOW,
                     sys_sigsuspend: ALLOW,
                     sys_clock_getcpuclockid2: ALLOW,
                     sys_fstatfs: ALLOW,
@@ -285,6 +285,10 @@ class IsolateTracer(dict):
         if normalized.startswith('/proc/self'):
             file = os.path.join(f'/proc/{debugger.tid}', os.path.relpath(file, '/proc/self'))
             projected = '/' + os.path.normpath(file).lstrip('/')
+        elif normalized.startswith(f'/proc/{debugger.tid}/'):
+            # If the child process uses /proc/getpid()/foo, set the normalized path to be /proc/self/foo.
+            # Access rules can more easily check /proc/self.
+            normalized = os.path.join('/proc/self', os.path.relpath(file, f'/proc/{debugger.tid}'))
         real = os.path.realpath(file)
 
         try:

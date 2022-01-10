@@ -15,6 +15,7 @@ RUN curl --location -o scratch-run.zip $(curl -s https://api.github.com/repos/VN
 RUN mkdir /judge /problems && cd /judge && \
 	curl -L https://github.com/VNOI-Admin/judge-server/archive/"${TAG}".tar.gz | tar -xz --strip-components=1 && \
 	pip3 install -e . && \
+	python3 setup.py develop && \
 	HOME=~judge . ~judge/.profile && \
 	runuser -u judge -w PATH -- dmoj-autoconf -V > /judge-runtime-paths.yml && \
 	echo '  crt_x86_in_lib32: true' >> /judge-runtime-paths.yml && \

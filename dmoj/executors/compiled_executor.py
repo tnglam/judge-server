@@ -1,4 +1,3 @@
-import abc
 import hashlib
 import os
 import pty
@@ -14,7 +13,7 @@ from dmoj.cptbox.handlers import ACCESS_EFAULT, ACCESS_EPERM, ALLOW
 from dmoj.cptbox.syscalls import *
 from dmoj.cptbox.tracer import AdvancedDebugger
 from dmoj.error import CompileError, OutputLimitExceeded
-from dmoj.executors.base_executor import BASE_FILESYSTEM, BASE_WRITE_FILESYSTEM, BaseExecutor
+from dmoj.executors.base_executor import BASE_FILESYSTEM, BASE_WRITE_FILESYSTEM, BaseExecutor, ExecutorMeta
 from dmoj.judgeenv import env
 from dmoj.utils.communicate import safe_communicate
 from dmoj.utils.error import print_protection_fault
@@ -31,8 +30,8 @@ from dmoj.utils.unicode import utf8bytes
 # Contract: if cached=True is specified and an entry exists in the cache,
 # `create_files` and `compile` will not be run, and `_executable` will be loaded
 # from the cache.
-class _CompiledExecutorMeta(abc.ABCMeta):
-    def __call__(self, *args, **kwargs) -> 'CompiledExecutor':
+class _CompiledExecutorMeta(ExecutorMeta):
+    def __call__(cls, *args, **kwargs) -> 'CompiledExecutor':
         is_cached: bool = kwargs.pop('cached', False)
         if is_cached:
             kwargs['dest_dir'] = env.compiled_binary_cache_dir
@@ -100,7 +99,6 @@ class CompilerIsolateTracer(IsolateTracer):
                 sys_chdir: self.check_file_access('chdir', 0),
                 sys_chmod: self.check_file_access('chmod', 0, is_write=True),
                 sys_utimensat: self.do_utimensat,
-                sys_statx: self.check_file_access_at('statx'),
                 sys_umask: ALLOW,
                 sys_flock: ALLOW,
                 sys_fsync: ALLOW,
