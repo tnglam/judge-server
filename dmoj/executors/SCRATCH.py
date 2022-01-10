@@ -13,7 +13,6 @@ from dmoj.utils.unicode import utf8bytes, utf8text
 
 class Executor(ScriptExecutor):
     ext = 'sc3'
-    name = 'SCRATCH'
     command = 'scratch-run'
     nproc = -1
     address_grace = 1048576
