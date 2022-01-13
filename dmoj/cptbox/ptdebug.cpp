@@ -361,7 +361,7 @@ bool pt_debugger::writestr(unsigned long addr, const char *str, size_t size) {
         return true;
     }
 
-    perror("process_vm_readv");
+    perror("process_vm_writev");
 #else
     struct ptrace_io_desc iod = {
         .piod_op = PIOD_WRITE_D,
