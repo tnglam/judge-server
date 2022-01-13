@@ -128,11 +128,20 @@ typedef long ptrace_read_t;
 #define SYS_process_vm_readv 270
 #endif
 
+#ifndef SYS_process_vm_writev
+#define SYS_process_vm_writev 271
+#endif
+
 // Android's bionic C library doesn't have this system call wrapper.
 // Therefore, we use a weak symbol so it could be used when it doesn't exist.
 ssize_t __attribute__((weak)) process_vm_readv(pid_t pid, const struct iovec *lvec, unsigned long liovcnt,
                                                const struct iovec *rvec, unsigned long riovcnt, unsigned long flags) {
     return syscall(SYS_process_vm_readv, (long) pid, lvec, liovcnt, rvec, riovcnt, flags);
+}
+
+ssize_t __attribute__((weak)) process_vm_writev(pid_t pid, const struct iovec *lvec, unsigned long liovcnt,
+                                                const struct iovec *rvec, unsigned long riovcnt, unsigned long flags) {
+    return syscall(SYS_process_vm_writev, (long) pid, lvec, liovcnt, rvec, riovcnt, flags);
 }
 #endif  // __BIONIC__
 
@@ -341,8 +350,7 @@ bool pt_debugger::writestr(unsigned long addr, const char *str, size_t size) {
         return false;
     }
 
-    // TODO: support other platforms than Linux
-
+#if !PTBOX_FREEBSD
     struct iovec local, remote;
     local.iov_base = (void *) str;
     local.iov_len = size;
@@ -354,6 +362,21 @@ bool pt_debugger::writestr(unsigned long addr, const char *str, size_t size) {
     }
 
     perror("process_vm_readv");
+#else
+    struct ptrace_io_desc iod = {
+        .piod_op = PIOD_WRITE_D,
+        .piod_offs = (void *) addr,
+        .piod_addr = (void *) str,
+        .piod_len = size,
+    };
+
+    if (ptrace(PT_IO, tid, (caddr_t) &iod, 0) < 0)
+        perror("ptrace(PT_IO)");
+    else if (size == iod.piod_len)
+        return true;
+    else
+        fprintf(stderr, "%d: failed to write %zu bytes, write %zu instead", tid, size, iod.piod_len);
+#endif
 
     return false;
 }
