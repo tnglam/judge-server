@@ -390,7 +390,7 @@ cdef class Debugger:
         cdef Py_ssize_t size
         cdef char* str
         PyBytes_AsStringAndSize(pystr.encode('utf-8'), &str, &size)
-        if not self.thisptr.writestr(address, str, size):
+        if not self.thisptr.writestr(address, str, size + 1):
             PyErr_SetFromErrno(OSError)
 
     @property
