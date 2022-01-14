@@ -125,7 +125,7 @@ def download_source_code(link, file_size_limit):
     except Exception as e:
         raise InternalError(repr(e))
 
-    if int(r.headers.get('Content-Length')) > file_size_limit:
+    if int(r.headers.get('Content-Length', 0)) > file_size_limit:
         raise InternalError(f"Response size ({r.headers.get('Content-Length')}) is larger than file size limit")
 
     size = 0
