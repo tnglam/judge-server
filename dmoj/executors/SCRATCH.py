@@ -12,7 +12,7 @@ from dmoj.utils.unicode import utf8bytes, utf8text
 
 
 class Executor(ScriptExecutor):
-    ext = 'sc3'
+    ext = 'sb3'
     command = 'scratch-run'
     nproc = -1
     address_grace = 1048576
@@ -21,6 +21,7 @@ class Executor(ScriptExecutor):
         'epoll_create1',
         'epoll_ctl',
         'epoll_wait',
+        'epoll_pwait',
         'statx',
     ]
     check_time = 10  # 10 seconds
