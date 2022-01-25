@@ -201,8 +201,10 @@ class pt_debugger {
     ptbox_regs regs;
     bool regs_changed;
     bool use_peekdata = false;
+    bool use_pokedata = false;
     char *readstr_peekdata(unsigned long addr, size_t max_size);
     bool readbytes_peekdata(unsigned long addr, char *buffer, size_t size);
+    bool writestr_pokedata(unsigned long addr, const char *str, size_t size);
 #if PTBOX_FREEBSD
     int _bsd_syscall;
     bool _bsd_in_syscall;

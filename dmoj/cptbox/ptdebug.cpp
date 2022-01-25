@@ -378,5 +378,44 @@ bool pt_debugger::writestr(unsigned long addr, const char *str, size_t size) {
         fprintf(stderr, "%d: failed to write %zu bytes, write %zu instead", tid, size, iod.piod_len);
 #endif
 
+    if (writestr_pokedata(addr, str, size)) {
+        use_pokedata = true;
+        return true;
+    }
+
     return false;
+}
+
+bool pt_debugger::writestr_pokedata(unsigned long addr, const char *str, size_t size) {
+    union {
+        ptrace_read_t val;
+        char byte[sizeof(ptrace_read_t)];
+    } data;
+    size_t write = 0;
+
+    while (write < size) {
+        if (size - write < sizeof(ptrace_read_t)) {
+            errno = 0;
+#if PTBOX_FREEBSD
+            data.val = ptrace(PT_READ_D, tid, (caddr_t) (addr + write), 0);
+#else
+            data.val = ptrace(PTRACE_PEEKDATA, tid, addr + write, NULL);
+#endif
+            if (data.val == -1 && errno)
+                return false;
+            memcpy(data.byte, str + write, size - write);
+        } else {
+            memcpy(data.byte, str + write, sizeof(ptrace_read_t));
+        }
+
+        errno = 0;
+#if PTBOX_FREEBSD
+        if (ptrace(PT_WRITE_D, tid, (caddr_t) (addr + write), data.val) == -1 && errno)
+#else
+        if (ptrace(PTRACE_POKEDATA, tid, addr + write, data.val) == -1 && errno)
+#endif
+            return false;
+        write += sizeof(ptrace_read_t);
+    }
+    return true;
 }
