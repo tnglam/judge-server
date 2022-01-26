@@ -8,7 +8,8 @@ import tempfile
 import traceback
 from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
 
-from dmoj.cptbox import IsolateTracer, TracedPopen, syscalls
+from dmoj.config import ConfigNode
+from dmoj.cptbox import FILE_IO_PIPE, IsolateTracer, TracedPopen, syscalls
 from dmoj.cptbox.filesystem_policies import ExactDir, ExactFile, FilesystemAccessRule, RecursiveDir
 from dmoj.cptbox.handlers import ALLOW
 from dmoj.error import InternalError
@@ -218,6 +219,7 @@ class BaseExecutor(metaclass=ExecutorMeta):
             read_fs=self.get_fs(),
             write_fs=self.get_write_fs(),
             path_case_fixes=launch_kwargs.get('path_case_fixes', []),
+            path_case_insensitive_whitelist=launch_kwargs.get('path_case_insensitive_whitelist', []),
         )
         return self._add_syscalls(sec)
 
@@ -256,18 +258,53 @@ class BaseExecutor(metaclass=ExecutorMeta):
         return env
 
     def launch(self, *args, **kwargs) -> TracedPopen:
+        def create_symlink(dst: str, src: str) -> None:
+            # Disallow the creation of symlinks outside the submission directory.
+            assert self._dir is not None
+            if os.path.commonprefix([src, self._dir]) != self._dir:
+                raise InternalError('cannot symlink outside of submission directory')
+
+            # If a link already exists under this name, it's probably from a
+            # previous case, but might point to something different.
+            if os.path.islink(src):
+                os.unlink(src)
+            os.symlink(dst, src)
+
         assert self._dir is not None
+
+        if 'path_case_fixes' not in kwargs:
+            kwargs['path_case_fixes'] = []
+        if 'path_case_insensitive_whitelist' not in kwargs:
+            kwargs['path_case_insensitive_whitelist'] = []
+
+        stdin, stdout = None, None
+        if isinstance(kwargs.get('file_io'), ConfigNode):
+            # Here's roughly how File IO works:
+            # - The input/output files are symlinks to `/dev/fd/3` and `/dev/fd/4`, respectively.
+            # - When passed FILE_IO_PIPE, TracedPopen will pipe the actual input/output to fd 3/4
+            #   instead of stdin/stdout. stdin and stdout are piped to `/dev/null`.
+            #
+            # On FreeBSD, fdescfs needs to be mounted manually: mount -t fdescfs null /dev/fd
+
+            file_io = kwargs['file_io']
+
+            if isinstance(file_io.get('input'), str):
+                stdin = FILE_IO_PIPE
+                input = os.path.abspath(os.path.join(self._dir, file_io['input']))
+                create_symlink('/dev/fd/3', input)
+                kwargs['path_case_fixes'].append(input)
+                kwargs['path_case_insensitive_whitelist'].append(input)
+
+            if isinstance(file_io.get('output'), str):
+                stdout = FILE_IO_PIPE
+                output = os.path.abspath(os.path.join(self._dir, file_io['output']))
+                create_symlink('/dev/fd/4', output)
+                kwargs['path_case_fixes'].append(output)
+                kwargs['path_case_insensitive_whitelist'].append(output)
+
         for src, dst in kwargs.get('symlinks', {}).items():
             src = os.path.abspath(os.path.join(self._dir, src))
-            # Disallow the creation of symlinks outside the submission directory.
-            if os.path.commonprefix([src, self._dir]) == self._dir:
-                # If a link already exists under this name, it's probably from a
-                # previous case, but might point to something different.
-                if os.path.islink(src):
-                    os.unlink(src)
-                os.symlink(dst, src)
-            else:
-                raise InternalError('cannot symlink outside of submission directory')
+            create_symlink(dst, src)
 
         agent = self._file('setbufsize.so')
         shutil.copyfile(setbufsize_path, agent)
@@ -293,8 +330,8 @@ class BaseExecutor(metaclass=ExecutorMeta):
             time=kwargs.get('time', 0),
             memory=kwargs.get('memory', 0),
             wall_time=kwargs.get('wall_time'),
-            stdin=kwargs.get('stdin'),
-            stdout=kwargs.get('stdout'),
+            stdin=stdin or kwargs.get('stdin'),
+            stdout=stdout or kwargs.get('stdout'),
             stderr=kwargs.get('stderr'),
             env=env,
             cwd=utf8bytes(self._dir),
