@@ -37,7 +37,7 @@ class IsolateTracer(dict):
 
         self._writable = list(writable)
         self._path_case_fixes = path_case_fixes
-        self._path_case_insensitive_whitelist = path_case_insensitive_whitelist
+        self._path_case_insensitive_whitelist = [s.lower() for s in path_case_insensitive_whitelist]
 
         if sys.platform.startswith('freebsd'):
             self._getcwd_pid = lambda pid: utf8text(bsd_get_proc_cwd(pid))
