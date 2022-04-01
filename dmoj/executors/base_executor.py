@@ -223,7 +223,7 @@ class BaseExecutor(metaclass=ExecutorMeta):
             read_fs=self.get_fs(),
             write_fs=self.get_write_fs(),
             path_case_fixes=launch_kwargs.get('path_case_fixes', []),
-            path_case_insensitive_whitelist=launch_kwargs.get('path_case_insensitive_whitelist', []),
+            path_whitelist=launch_kwargs.get('path_whitelist', []),
         )
         return self._add_syscalls(sec, self.get_allowed_syscalls())
 
@@ -278,8 +278,8 @@ class BaseExecutor(metaclass=ExecutorMeta):
 
         if 'path_case_fixes' not in kwargs:
             kwargs['path_case_fixes'] = []
-        if 'path_case_insensitive_whitelist' not in kwargs:
-            kwargs['path_case_insensitive_whitelist'] = []
+        if 'path_whitelist' not in kwargs:
+            kwargs['path_whitelist'] = []
 
         stdin, stdout = None, None
         if isinstance(kwargs.get('file_io'), ConfigNode):
@@ -297,14 +297,14 @@ class BaseExecutor(metaclass=ExecutorMeta):
                 input = os.path.abspath(os.path.join(self._dir, file_io['input']))
                 create_symlink('/dev/fd/3', input)
                 kwargs['path_case_fixes'].append(input)
-                kwargs['path_case_insensitive_whitelist'].append(input)
+                kwargs['path_whitelist'].append(input)
 
             if isinstance(file_io.get('output'), str):
                 stdout = FILE_IO_PIPE
                 output = os.path.abspath(os.path.join(self._dir, file_io['output']))
                 create_symlink('/dev/fd/4', output)
                 kwargs['path_case_fixes'].append(output)
-                kwargs['path_case_insensitive_whitelist'].append(output)
+                kwargs['path_whitelist'].append(output)
 
         for src, dst in kwargs.get('symlinks', {}).items():
             src = os.path.abspath(os.path.join(self._dir, src))

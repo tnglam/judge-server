@@ -43,15 +43,19 @@ DirFDGetter = Callable[[Debugger], int]
 
 class IsolateTracer(dict):
     def __init__(
-        self, *, read_fs: Sequence[FilesystemAccessRule], write_fs: Sequence[FilesystemAccessRule],
-        path_case_fixes=[], path_case_insensitive_whitelist=[]
+        self,
+        *,
+        read_fs: Sequence[FilesystemAccessRule],
+        write_fs: Sequence[FilesystemAccessRule],
+        path_case_fixes=[],
+        path_whitelist=[],
     ):
         super().__init__()
         self.read_fs_jail = self._compile_fs_jail(read_fs)
         self.write_fs_jail = self._compile_fs_jail(write_fs)
 
         self._path_case_fixes = path_case_fixes
-        self._path_case_insensitive_whitelist = [s.lower() for s in path_case_insensitive_whitelist]
+        self._path_whitelist = path_whitelist
 
         if sys.platform.startswith('freebsd'):
             self._getcwd_pid = lambda pid: utf8text(bsd_get_proc_cwd(pid))
@@ -231,20 +235,7 @@ class IsolateTracer(dict):
         try:
             debugger.writestr(ptr, file)
         except OSError:
-            return ACCESS_EFAULT(debugger)
-        return None
-
-    @staticmethod
-    def read_path(syscall: str, debugger: Debugger, ptr: int):
-        try:
-            file = debugger.readstr(ptr)
-        except MaxLengthExceeded as e:
-            log.warning('Denied access via syscall %s to overly long path: %r', syscall, e.args[0])
-            return None, ACCESS_ENAMETOOLONG(debugger)
-        except UnicodeDecodeError as e:
-            log.warning('Denied access via syscall %s to path with invalid unicode: %r', syscall, e.object)
-            return None, ACCESS_ENOENT(debugger)
-        return file, None
+            raise DeniedSyscall(ACCESS_EFAULT, 'Cannot write path')
 
     def _fs_jail_getter_from_open_flags_reg(self, reg: int) -> FSJailGetter:
         def getter(debugger: Debugger) -> FilesystemPolicy:
@@ -310,6 +301,7 @@ class IsolateTracer(dict):
 
             dirfd = getattr(debugger, 'uarg%d' % dir_reg)
             full_path = self.get_full_path_unnormalized(debugger, rel_file, dirfd=dirfd)
+            full_path = self._fix_path_case(full_path, rel_file, debugger, getattr(debugger, 'uarg%d' % file_reg))
             self._access_check(debugger, full_path, self.read_fs_jail)
 
         return check
@@ -319,6 +311,7 @@ class IsolateTracer(dict):
             rel_file = self.get_rel_file(debugger, reg=file_reg)
             dirfd = dirfd_getter(debugger)
             full_path = self.get_full_path_unnormalized(debugger, rel_file, dirfd=dirfd)
+            full_path = self._fix_path_case(full_path, rel_file, debugger, getattr(debugger, 'uarg%d' % file_reg))
             fs_jail = fs_jail_getter(debugger)
             self._access_check(debugger, full_path, fs_jail)
 
@@ -379,19 +372,12 @@ class IsolateTracer(dict):
             normalized = os.path.join('/proc/self', os.path.relpath(file, f'/proc/{debugger.tid}'))
         real = os.path.realpath(file)
 
-        # This hack is needed for File IO, which, for compatibility with Windows, is case-insensitive.
-        # Because Unix is case-sensitive, two cases can happen:
-        #
-        # - `file` does not exist. os.path.realpath(file) returns the path as is.
-        #   `normalized` and `real` are the same, so the samefile check WILL ALWAYS PASS.
-        #
-        # - `file` does exist. os.path.realpath(file) may return anything depending on the environment:
-        #   `/dev/null`, `/dev/pts/0`, or even `/proc/{our pid}/fd/pipe:[?]`.
-        #   The samefile check can pass gracefully in some situations and fail terribly in others.
-        #
+        # This hack is need for File IO, which symlinks the input/output files to `/dev/fd/3` and `/dev/fd/4`.
+        # As a result, os.path.realpath(file) may return anything depending on the environment:
+        # `/dev/null`, `/dev/pts/0`, or even `/proc/{our pid}/fd/pipe:[?]`.
         # To avoid this nightmare, let's just skip the check.
-        if normalized.lower() in self._path_case_insensitive_whitelist:
-            return normalized, None
+        if normalized in self._path_whitelist:
+            return
 
         try:
             same = normalized == real or os.path.samefile(projected, real)
@@ -414,7 +400,7 @@ class IsolateTracer(dict):
             if not fs_jail.check(real):
                 raise DeniedSyscall(ACCESS_EACCES, f'Denying {file}, real path {real}')
 
-    def _fix_path_case(self, file: str, syscall: str, debugger: Debugger, ptr: int):
+    def _fix_path_case(self, file: str, orig_path: str, debugger: Debugger, ptr: int) -> str:
         # Windows is case-insensitive, while Unix is case-sensitive.
         # This makes some checkers that were originally written for Windows fail to work on Unix.
         # If required, we fix the path here, so the checker would work normally.
@@ -426,10 +412,6 @@ class IsolateTracer(dict):
                 # e.g. orig_path = "PoSt.InP"; file = "/tmp/tmp2b4uv0zl/PoSt.InP"; dest = "/tmp/tmp2b4uv0zl/post.inp"
                 # We need to fix the path to "post.inp".
 
-                orig_path, error = self.read_path(syscall, debugger, ptr)
-                if error is not None:
-                    return error
-
                 # To keep it simple, we'll only fix the base name.
                 orig_basename = os.path.basename(file)  # "PoSt.InP" for the example above
                 basename = os.path.basename(dest)  # "post.inp" for the example above
@@ -438,10 +420,13 @@ class IsolateTracer(dict):
                 if not orig_path.endswith(orig_basename):
                     # Looks like directory traversal is involved.
                     # For simplicity and safety, we won't apply any fix here.
-                    return None
+                    return file
 
                 fixed_path = orig_path[: -len(orig_basename)] + basename
-                return self.write_path(debugger, ptr, fixed_path)
+                self.write_path(debugger, ptr, fixed_path)
+                return file[: -len(fixed_path)] + fixed_path
+
+        return file
 
     def get_full_path(self, debugger: Debugger, file: str, dirfd: int = AT_FDCWD) -> str:
         dirfd = (dirfd & 0x7FFFFFFF) - (dirfd & 0x80000000)
