@@ -1,8 +1,11 @@
 from dmoj.cptbox.filesystem_policies import RecursiveDir
 from dmoj.executors.compiled_executor import CompiledExecutor
+from dmoj.executors.mixins import StripCarriageReturnsMixin
 
 
-class Executor(CompiledExecutor):
+# Need to strip carriage returns because otherwise Zig refuses to compile.
+# See <https://github.com/ziglang/zig/issues/544>.
+class Executor(StripCarriageReturnsMixin, CompiledExecutor):
     ext = 'zig'
     command = 'zig'
     compiler_time_limit = 30
@@ -10,6 +13,7 @@ class Executor(CompiledExecutor):
         RecursiveDir('~/.cache'),
     ]
     compiler_write_fs = compiler_read_fs
+    compiler_required_dirs = ['~/.cache']
     test_program = """
 const std = @import("std");
 
@@ -24,12 +28,6 @@ pub fn main() !void {
         try stdout.print("{}", .{line});
     }
 }"""
-
-    def create_files(self, problem_id, source_code, *args, **kwargs):
-        # This cleanup needs to happen because Zig refuses to compile carriage returns.
-        # See <https://github.com/ziglang/zig/issues/544>.
-        source_code = source_code.replace(b'\r\n', b'\r').replace(b'\r', b'\n')
-        super().create_files(problem_id, source_code, *args, **kwargs)
 
     def get_compile_args(self):
         return [self.get_command(), 'build-exe', self._code, '--release-safe', '--name', self.problem]

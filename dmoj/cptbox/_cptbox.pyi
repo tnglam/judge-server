@@ -1,4 +1,4 @@
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Dict, List, Tuple, Optional
 
 PTBOX_ABI_X86: int
 PTBOX_ABI_X64: int
@@ -53,6 +53,7 @@ class Process:
     _cpu_time: int
     _nproc: int
     _fsize: int
+    _cpu_affinity_mask: int
 
     use_seccomp: bool
     _trace_syscalls: bool
@@ -83,6 +84,8 @@ class Process:
     @property
     def max_memory(self) -> int: ...
     @property
+    def context_switches(self) -> Tuple[int, int]: ...
+    @property
     def signal(self) -> Optional[int]: ...
     @property
     def returncode(self) -> Optional[int]: ...
@@ -94,6 +97,7 @@ PTBOX_SPAWN_FAIL_NO_NEW_PRIVS: int
 PTBOX_SPAWN_FAIL_SECCOMP: int
 PTBOX_SPAWN_FAIL_TRACEME: int
 PTBOX_SPAWN_FAIL_EXECVE: int
+PTBOX_SPAWN_FAIL_SETAFFINITY: int
 
 AT_FDCWD: int
 bsd_get_proc_cwd: Callable[[int], str]

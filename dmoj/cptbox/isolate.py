@@ -1,14 +1,14 @@
 import logging
 import os
 import sys
-from typing import Optional, Tuple
+from enum import Enum
+from typing import Any, Callable, Mapping, Sequence
 
 from dmoj.cptbox._cptbox import AT_FDCWD, Debugger, bsd_get_proc_cwd, bsd_get_proc_fdno
-from dmoj.cptbox.filesystem_policies import FilesystemPolicy
+from dmoj.cptbox.filesystem_policies import FilesystemAccessRule, FilesystemPolicy
 from dmoj.cptbox.handlers import (
     ACCESS_EACCES,
     ACCESS_EFAULT,
-    ACCESS_EINVAL,
     ACCESS_ENAMETOOLONG,
     ACCESS_ENOENT,
     ACCESS_EPERM,
@@ -16,6 +16,7 @@ from dmoj.cptbox.handlers import (
     ErrnoHandlerCallback,
 )
 from dmoj.cptbox.syscalls import *
+from dmoj.cptbox.syscalls import by_id
 from dmoj.cptbox.tracer import HandlerCallback, MaxLengthExceeded
 from dmoj.utils.unicode import utf8text
 
@@ -29,13 +30,26 @@ except AttributeError:
     pass
 
 
+class FilesystemSyscallKind(Enum):
+    READ = 1
+    WRITE = 2
+
+
+AccessChecker = Callable[[Debugger], None]
+
+FSJailGetter = Callable[[Debugger], FilesystemPolicy]
+DirFDGetter = Callable[[Debugger], int]
+
+
 class IsolateTracer(dict):
-    def __init__(self, read_fs, write_fs=None, writable=(1, 2), path_case_fixes=[], path_case_insensitive_whitelist=[]):
+    def __init__(
+        self, *, read_fs: Sequence[FilesystemAccessRule], write_fs: Sequence[FilesystemAccessRule],
+        path_case_fixes=[], path_case_insensitive_whitelist=[]
+    ):
         super().__init__()
         self.read_fs_jail = self._compile_fs_jail(read_fs)
         self.write_fs_jail = self._compile_fs_jail(write_fs)
 
-        self._writable = list(writable)
         self._path_case_fixes = path_case_fixes
         self._path_case_insensitive_whitelist = [s.lower() for s in path_case_insensitive_whitelist]
 
@@ -49,22 +63,22 @@ class IsolateTracer(dict):
         self.update(
             {
                 # Deny with report
-                sys_openat: self.check_file_access_at('openat', is_open=True),
-                sys_open: self.check_file_access('open', 0, is_open=True),
-                sys_faccessat: self.check_file_access_at('faccessat'),
-                sys_faccessat2: self.check_file_access_at('faccessat2'),
-                sys_access: self.check_file_access('access', 0),
-                sys_readlink: self.check_file_access('readlink', 0),
-                sys_readlinkat: self.check_file_access_at('readlinkat'),
-                sys_stat: self.check_file_access('stat', 0),
-                sys_stat64: self.check_file_access('stat64', 0),
-                sys_lstat: self.check_file_access('lstat', 0),
-                sys_lstat64: self.check_file_access('lstat64', 0),
-                sys_fstatat: self.check_file_access_at('fstatat'),
-                sys_statx: self.check_file_access_at('statx'),
-                sys_tgkill: self.do_kill,
-                sys_kill: self.do_kill,
-                sys_prctl: self.do_prctl,
+                sys_openat: self.handle_openat(dir_reg=0, file_reg=1, flag_reg=2),
+                sys_open: self.handle_open(file_reg=0, flag_reg=1),
+                sys_faccessat: self.handle_file_access_at(FilesystemSyscallKind.READ, dir_reg=0, file_reg=1),
+                sys_faccessat2: self.handle_file_access_at(FilesystemSyscallKind.READ, dir_reg=0, file_reg=1),
+                sys_access: self.handle_file_access(FilesystemSyscallKind.READ, file_reg=0),
+                sys_readlink: self.handle_file_access(FilesystemSyscallKind.READ, file_reg=0),
+                sys_readlinkat: self.handle_file_access_at(FilesystemSyscallKind.READ, dir_reg=0, file_reg=1),
+                sys_stat: self.handle_file_access(FilesystemSyscallKind.READ, file_reg=0),
+                sys_stat64: self.handle_file_access(FilesystemSyscallKind.READ, file_reg=0),
+                sys_lstat: self.handle_file_access(FilesystemSyscallKind.READ, file_reg=0),
+                sys_lstat64: self.handle_file_access(FilesystemSyscallKind.READ, file_reg=0),
+                sys_fstatat: self.handle_fstat(dir_reg=0, file_reg=1),
+                sys_statx: self.handle_fstat(dir_reg=0, file_reg=1),
+                sys_tgkill: self.handle_kill,
+                sys_kill: self.handle_kill,
+                sys_prctl: self.handle_prctl,
                 sys_read: ALLOW,
                 sys_pread64: ALLOW,
                 sys_write: ALLOW,
@@ -154,7 +168,7 @@ class IsolateTracer(dict):
                 sys_llseek: ALLOW,
                 sys_fcntl64: ALLOW,
                 sys_time: ALLOW,
-                sys_prlimit64: self.do_prlimit,
+                sys_prlimit64: self.handle_prlimit,
                 sys_getdents64: ALLOW,
             }
         )
@@ -175,8 +189,8 @@ class IsolateTracer(dict):
                     sys_setcontext: ALLOW,
                     sys_pread: ALLOW,
                     sys_fsync: ALLOW,
-                    sys_shm_open: self.check_file_access('shm_open', 0),
-                    sys_shm_open2: self.check_file_access('shm_open2', 0),
+                    sys_shm_open: self.handle_open(file_reg=0, flag_reg=1),
+                    sys_shm_open2: self.handle_open(file_reg=0, flag_reg=1),
                     sys_cpuset_getaffinity: ALLOW,
                     sys_thr_new: ALLOW,
                     sys_thr_exit: ALLOW,
@@ -196,21 +210,29 @@ class IsolateTracer(dict):
                     sys_minherit: ALLOW,
                     sys_thr_set_name: ALLOW,
                     sys_sigfastblock: ALLOW,
-                    sys_realpathat: self.check_file_access_at('realpathat'),
+                    sys_realpathat: self.handle_file_access_at(FilesystemSyscallKind.READ, dir_reg=0, file_reg=1),
                 }
             )
 
-    def _compile_fs_jail(self, fs):
-        return FilesystemPolicy(fs or [])
+    def _compile_fs_jail(self, fs: Sequence[FilesystemAccessRule]) -> FilesystemPolicy:
+        return FilesystemPolicy(fs)
 
-    def is_write_flags(self, open_flags: int) -> bool:
-        for flag in open_write_flags:
-            # Strict equality is necessary here, since e.g. O_TMPFILE has multiple bits set,
-            # and O_DIRECTORY & O_TMPFILE > 0.
-            if open_flags & flag == flag:
-                return True
+    def _dirfd_getter_from_reg(self, reg: int) -> DirFDGetter:
+        def getter(debugger: Debugger) -> int:
+            return getattr(debugger, 'uarg%d' % reg)
 
-        return False
+        return getter
+
+    def _dirfd_getter_cwd(self, debugger: Debugger) -> int:
+        return AT_FDCWD
+
+    @staticmethod
+    def write_path(debugger: Debugger, ptr: int, file: str):
+        try:
+            debugger.writestr(ptr, file)
+        except OSError:
+            return ACCESS_EFAULT(debugger)
+        return None
 
     @staticmethod
     def read_path(syscall: str, debugger: Debugger, ptr: int):
@@ -224,75 +246,118 @@ class IsolateTracer(dict):
             return None, ACCESS_ENOENT(debugger)
         return file, None
 
-    @staticmethod
-    def write_path(debugger: Debugger, ptr: int, file: str):
+    def _fs_jail_getter_from_open_flags_reg(self, reg: int) -> FSJailGetter:
+        def getter(debugger: Debugger) -> FilesystemPolicy:
+            open_flags = getattr(debugger, 'uarg%d' % reg)
+            for flag in open_write_flags:
+                # Strict equality is necessary here, since e.g. O_TMPFILE has multiple bits set,
+                # and O_DIRECTORY & O_TMPFILE > 0.
+                if open_flags & flag == flag:
+                    return self.write_fs_jail
+
+            return self.read_fs_jail
+
+        return getter
+
+    def _fs_jail_getter_from_kind(self, kind: FilesystemSyscallKind) -> FSJailGetter:
+        def getter(debugger: Debugger) -> FilesystemPolicy:
+            return {
+                FilesystemSyscallKind.READ: self.read_fs_jail,
+                FilesystemSyscallKind.WRITE: self.write_fs_jail,
+            }[kind]
+
+        return getter
+
+    def handle_file_access(self, kind: FilesystemSyscallKind, *, file_reg: int) -> AccessChecker:
+        return self.access_check(self._fs_jail_getter_from_kind(kind), self._dirfd_getter_cwd, file_reg=file_reg)
+
+    def handle_file_access_at(self, kind: FilesystemSyscallKind, *, dir_reg: int, file_reg: int) -> AccessChecker:
+        return self.access_check(
+            self._fs_jail_getter_from_kind(kind), self._dirfd_getter_from_reg(dir_reg), file_reg=file_reg
+        )
+
+    def handle_open(self, *, file_reg: int, flag_reg: int) -> AccessChecker:
+        return self.access_check(
+            self._fs_jail_getter_from_open_flags_reg(flag_reg), self._dirfd_getter_cwd, file_reg=file_reg
+        )
+
+    def handle_openat(self, *, dir_reg: int, file_reg: int, flag_reg: int) -> AccessChecker:
+        return self.access_check(
+            self._fs_jail_getter_from_open_flags_reg(flag_reg),
+            self._dirfd_getter_from_reg(dir_reg),
+            file_reg=file_reg,
+        )
+
+    def handle_fstat(self, *, dir_reg: int, file_reg: int) -> AccessChecker:
+        def check(debugger: Debugger) -> None:
+            rel_file = self.get_rel_file(debugger, reg=file_reg)
+
+            # FIXME(tbrindus): defined here because FreeBSD 13 does not
+            # implement AT_EMPTY_PATH, and 14 is not yet released (but does).
+            AT_EMPTY_PATH = 0x1000
+            # FIXME(tbrindus): we always follow symlinks, regardless of whether
+            # AT_SYMLINK_NOFOLLOW is set. This may result in us denying files
+            # we otherwise wouldn't have.
+            if rel_file == '' and debugger.uarg3 & AT_EMPTY_PATH:
+                # If pathname is an empty string, operate on the file referred to
+                # by dirfd (which may have been obtained using the open(2) O_PATH
+                # flag). In this case, dirfd can refer to any type of file, not
+                # just a directory, and the behavior of fstatat() is similar to
+                # that of fstat(). If dirfd is AT_FDCWD, the call operates on the
+                # current working directory.
+                # We already allowed this one way or another, don't check again.
+                return
+
+            dirfd = getattr(debugger, 'uarg%d' % dir_reg)
+            full_path = self.get_full_path_unnormalized(debugger, rel_file, dirfd=dirfd)
+            self._access_check(debugger, full_path, self.read_fs_jail)
+
+        return check
+
+    def access_check(self, fs_jail_getter: FSJailGetter, dirfd_getter: DirFDGetter, *, file_reg: int) -> AccessChecker:
+        def check(debugger: Debugger) -> None:
+            rel_file = self.get_rel_file(debugger, reg=file_reg)
+            dirfd = dirfd_getter(debugger)
+            full_path = self.get_full_path_unnormalized(debugger, rel_file, dirfd=dirfd)
+            fs_jail = fs_jail_getter(debugger)
+            self._access_check(debugger, full_path, fs_jail)
+
+        return check
+
+    def get_rel_file(self, debugger: Debugger, *, reg: int) -> str:
+        ptr = getattr(debugger, 'uarg%d' % reg)
         try:
-            debugger.writestr(ptr, file)
-        except OSError:
-            return ACCESS_EFAULT(debugger)
-        return None
+            file = debugger.readstr(ptr)
+        except MaxLengthExceeded as e:
+            raise DeniedSyscall(ACCESS_ENAMETOOLONG, f'Overly long path: {e.args[0]}')
+        except UnicodeDecodeError as e:
+            raise DeniedSyscall(
+                ACCESS_ENOENT, f'Invalid unicode: {e.object!r}'
+            )  # !r for mypy, confirm we know it's bytes
 
-    def check_file_access(self, syscall, argument, is_write=None, is_open=False) -> HandlerCallback:
-        assert is_write is None or not is_open
-
-        def check(debugger: Debugger) -> bool:
-            file, error = self.read_path(syscall, debugger, getattr(debugger, 'uarg%d' % argument))
-            if error is not None:
-                return error
-
-            file, error = self._file_access_check(file, debugger, is_open, is_write=is_write)
-            if not error:
-                error = self._fix_path_case(file, syscall, debugger, getattr(debugger, 'uarg%d' % argument))
-                if error is not None:
-                    return error
-                return True
-
-            log.debug('Denied access via syscall %s (error: %s): %s', syscall, error.error_name, file)
-            return error(debugger)
-
-        return check
-
-    def check_file_access_at(self, syscall, argument=1, is_open=False, is_write=None) -> HandlerCallback:
-        def check(debugger: Debugger) -> bool:
-            file, error = self.read_path(syscall, debugger, getattr(debugger, 'uarg%d' % argument))
-            if error is not None:
-                return error
-
-            file, error = self._file_access_check(
-                file, debugger, is_open, is_write=is_write, dirfd=debugger.arg0, flag_reg=2
-            )
-            if not error:
-                error = self._fix_path_case(file, syscall, debugger, getattr(debugger, 'uarg%d' % argument))
-                if error is not None:
-                    return error
-                return True
-
-            log.debug('Denied access via syscall %s (error: %s): %s', syscall, error.error_name, file)
-            return error(debugger)
-
-        return check
-
-    def _file_access_check(
-        self, rel_file, debugger, is_open, is_write=None, flag_reg=1, dirfd=AT_FDCWD
-    ) -> Tuple[str, Optional[ErrnoHandlerCallback]]:
         # Either process called open(NULL, ...), or we failed to read the path
         # in cptbox.  Either way this call should not be allowed; if the path
         # was indeed NULL we can end the request before it gets to the kernel
         # without any downside, and if it was *not* NULL and we failed to read
         # it, then we should *definitely* stop the call here.
-        if rel_file is None:
-            return '(nil)', ACCESS_EFAULT
+        if file is None:
+            raise DeniedSyscall(ACCESS_EFAULT, 'Unreadable or NULL path')
 
-        if is_write is None and is_open:
-            is_write = self.is_write_flags(getattr(debugger, 'uarg%d' % flag_reg))
-        fs_jail = self.write_fs_jail if is_write else self.read_fs_jail
+        return file
 
-        try:
-            file = self.get_full_path(debugger, rel_file, dirfd)
-        except UnicodeDecodeError:
-            log.exception('Unicode decoding error while opening relative to %d: %r', dirfd, rel_file)
-            return '(undecodable)', ACCESS_EINVAL
+    # intentionally non-normalized
+    def get_full_path_unnormalized(self, debugger: Debugger, rel_file: str, *, dirfd: int) -> str:
+        if rel_file.startswith('/'):
+            return rel_file
+        return os.path.join(self.get_dir(debugger, dirfd=dirfd), rel_file)
 
+    def get_dir(self, debugger: Debugger, *, dirfd: int) -> str:
+        dirfd = (dirfd & 0x7FFFFFFF) - (dirfd & 0x80000000)  # Interpret dirfd as a signed 32-bit integer
+        if dirfd == AT_FDCWD:
+            return self._getcwd_pid(debugger.tid)
+        return self._getfd_pid(debugger.tid, dirfd)
+
+    def _access_check(self, debugger: Debugger, file: str, fs_jail: FilesystemPolicy) -> None:
         # We want to ensure that if there are symlinks, the user must be able to access both the symlink and
         # its destination. However, we are doing path-based checks, which means we have to check these as
         # as normalized paths. normpath can normalize a path, but also changes the meaning of paths in presence of
@@ -302,6 +367,8 @@ class IsolateTracer(dict):
         # This works, except when the child process uses /proc/self, which refers to something else in this process.
         # Therefore, we "project" it by changing it to /proc/[tid] for computing the realpath and doing the samefile
         # check. However, we still keep it as /proc/self when checking access rules.
+
+        # normpath doesn't strip leading slashes
         projected = normalized = '/' + os.path.normpath(file).lstrip('/')
         if normalized.startswith('/proc/self'):
             file = os.path.join(f'/proc/{debugger.tid}', os.path.relpath(file, '/proc/self'))
@@ -329,19 +396,15 @@ class IsolateTracer(dict):
         try:
             same = normalized == real or os.path.samefile(projected, real)
         except OSError:
-            log.debug('Denying access due to inability to stat: normalizes to: %s, actually: %s', normalized, real)
-            return file, ACCESS_ENOENT
-        else:
-            if not same:
-                log.warning(
-                    'Denying access due to suspected symlink trickery: normalizes to: %s, actually: %s',
-                    normalized,
-                    real,
-                )
-                return file, ACCESS_EACCES
+            raise DeniedSyscall(ACCESS_ENOENT, f'Cannot stat, file: {file}, projected: {projected}, real: {real}')
+
+        if not same:
+            raise DeniedSyscall(
+                ACCESS_EACCES, f'Suspected symlink trickery, file: {file}, projected: {projected}, real: {real}'
+            )
 
         if not fs_jail.check(normalized):
-            return normalized, ACCESS_EACCES
+            raise DeniedSyscall(ACCESS_EACCES, f'Denying {file}, normalized to {normalized}')
 
         if normalized != real:
             proc_dir = f'/proc/{debugger.tid}'
@@ -349,9 +412,7 @@ class IsolateTracer(dict):
                 real = os.path.join('/proc/self', os.path.relpath(real, proc_dir))
 
             if not fs_jail.check(real):
-                return real, ACCESS_EACCES
-
-        return normalized, None
+                raise DeniedSyscall(ACCESS_EACCES, f'Denying {file}, real path {real}')
 
     def _fix_path_case(self, file: str, syscall: str, debugger: Debugger, ptr: int):
         # Windows is case-insensitive, while Unix is case-sensitive.
@@ -390,18 +451,61 @@ class IsolateTracer(dict):
         file = '/' + os.path.normpath(file).lstrip('/')
         return file
 
-    def do_kill(self, debugger: Debugger) -> bool:
+    def handle_kill(self, debugger: Debugger) -> None:
         # Allow tgkill to execute as long as the target thread group is the debugged process
         # libstdc++ seems to use this to signal itself, see <https://github.com/DMOJ/judge/issues/183>
-        return True if debugger.uarg0 == debugger.pid else ACCESS_EPERM(debugger)
+        if debugger.uarg0 != debugger.pid:
+            raise DeniedSyscall(ACCESS_EPERM, 'Cannot kill other processes')
 
-    def do_prlimit(self, debugger: Debugger) -> bool:
-        return True if debugger.uarg0 in (0, debugger.pid) else ACCESS_EPERM(debugger)
+    def handle_prlimit(self, debugger: Debugger) -> None:
+        if debugger.uarg0 not in (0, debugger.pid):
+            raise DeniedSyscall(ACCESS_EPERM, 'Cannot prlimit other processes')
 
-    def do_prctl(self, debugger: Debugger) -> bool:
+    def handle_prctl(self, debugger: Debugger) -> None:
         PR_GET_DUMPABLE = 3
         PR_SET_NAME = 15
         PR_GET_NAME = 16
         PR_SET_THP_DISABLE = 41
         PR_SET_VMA = 0x53564D41  # Used on Android
-        return debugger.arg0 in (PR_GET_DUMPABLE, PR_SET_NAME, PR_GET_NAME, PR_SET_THP_DISABLE, PR_SET_VMA)
+        if debugger.arg0 not in (PR_GET_DUMPABLE, PR_SET_NAME, PR_GET_NAME, PR_SET_THP_DISABLE, PR_SET_VMA):
+            raise DeniedSyscall(protection_fault, f'Non-whitelisted prctl option: {debugger.arg0}')
+
+    # ignore typing because of overload checks
+    def update(self, handlers: Mapping[int, Any]) -> None:  # type: ignore
+        for syscall, handler in handlers.items():
+            self[syscall] = handler
+
+    def __setitem__(self, syscall: int, handler) -> None:
+        if handler == ALLOW or isinstance(handler, ErrnoHandlerCallback):
+            super().__setitem__(syscall, handler)
+        else:
+            super().__setitem__(syscall, wrap_access_check(syscall, handler))
+
+
+def wrap_access_check(syscall: int, check: AccessChecker) -> HandlerCallback:
+    def inner(debugger) -> bool:
+        try:
+            check(debugger)
+            return True
+        except DeniedSyscall as failure:
+            failure.log(syscall)
+            return failure.handler(debugger)
+
+    return inner
+
+
+def protection_fault(self, debugger: Debugger) -> bool:
+    return False
+
+
+class DeniedSyscall(Exception):
+    def __init__(self, handler: Callable, reason: str):
+        self.handler = handler
+        self.reason = reason
+
+    def log(self, syscall: int):
+        syscall_name = by_id[syscall]
+        if syscall_name.startswith('sys_'):
+            syscall_name = syscall_name[4:]
+        # We don't want to put the reason in the first position, because then users could insert format strings.
+        log.debug('%s', f'Denied syscall {syscall_name}: ' + self.reason)

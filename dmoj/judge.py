@@ -10,7 +10,7 @@ from enum import Enum
 from http.server import HTTPServer
 from itertools import groupby
 from operator import itemgetter
-from typing import Any, Callable, Dict, Generator, List, NamedTuple, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Generator, List, NamedTuple, Optional, Set, Tuple, Union
 
 from dmoj import packet
 from dmoj.control import JudgeControlRequestHandler
@@ -209,10 +209,12 @@ class Judge:
         if is_sc:
             case_info = ''
         else:
-            case_info = '[%.3fs (%.3fs) | %dkb] %s%s' % (
+            case_info = '[%.3fs (%.3fs wall) | %dkb | %d switches (%d involuntary)] %s%s' % (
                 result.execution_time,
                 result.wall_clock_time,
                 result.max_memory,
+                sum(result.context_switches),
+                result.context_switches[1],
                 colored_feedback,
                 colored_aux_codes,
             )
@@ -456,11 +458,13 @@ class JudgeWorker:
 
         flattened_cases: List[Tuple[Optional[int], Union[TestCase, BatchedTestCase]]] = []
         batch_number = 0
+        batch_dependencies: List[Set[int]] = []
         for case in self.grader.cases():
             if isinstance(case, BatchedTestCase):
                 batch_number += 1
                 for batched_case in case.batched_cases:
                     flattened_cases.append((batch_number, batched_case))
+                batch_dependencies.append(set(case.dependencies))
             else:
                 flattened_cases.append((None, case))
 
@@ -469,9 +473,14 @@ class JudgeWorker:
         is_short_circuiting_enabled = self.submission.short_circuit
         judged_results: Dict[Tuple[str, str, int], Optional[Result]] = {}
         result: Optional[Result] = None
+        passed_batches: Set[int] = set()
         for batch_number, cases in groupby(flattened_cases, key=itemgetter(0)):
             if batch_number:
                 yield IPC.BATCH_BEGIN, (batch_number,)
+
+                dependencies = batch_dependencies[batch_number - 1]  # List is zero-indexed
+                if passed_batches & dependencies != dependencies:
+                    is_short_circuiting = True
 
             for _, case in cases:
                 case_number += 1
@@ -514,6 +523,9 @@ class JudgeWorker:
                 yield IPC.RESULT, (batch_number, case_number, result)
 
             if batch_number:
+                if not is_short_circuiting:
+                    passed_batches.add(batch_number)
+
                 yield IPC.BATCH_END, (batch_number,)
                 is_short_circuiting &= is_short_circuiting_enabled
 
@@ -602,7 +614,9 @@ def main():  # pragma: no cover
         pass
 
     logging.basicConfig(
-        filename=logfile, level=logging.INFO, format='%(levelname)s %(asctime)s %(process)d %(module)s %(message)s'
+        filename=logfile,
+        level=judgeenv.log_level,
+        format='%(levelname)s %(asctime)s %(process)d %(module)s %(message)s',
     )
 
     setproctitle('DMOJ Judge %s on %s' % (env['id'], make_host_port(judgeenv)))

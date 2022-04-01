@@ -14,7 +14,7 @@ __all__ = ['Process', 'Debugger', 'bsd_get_proc_cwd', 'bsd_get_proc_fdno', 'MAX_
            'PTBOX_ABI_X86', 'PTBOX_ABI_X64', 'PTBOX_ABI_X32', 'PTBOX_ABI_ARM', 'PTBOX_ABI_ARM64',
            'PTBOX_ABI_FREEBSD_X64', 'PTBOX_ABI_INVALID', 'PTBOX_ABI_COUNT',
            'PTBOX_SPAWN_FAIL_NO_NEW_PRIVS', 'PTBOX_SPAWN_FAIL_SECCOMP', 'PTBOX_SPAWN_FAIL_TRACEME',
-           'PTBOX_SPAWN_FAIL_EXECVE']
+           'PTBOX_SPAWN_FAIL_EXECVE', 'PTBOX_SPAWN_FAIL_SETAFFINITY']
 
 
 cdef extern from 'ptbox.h' nogil:
@@ -80,6 +80,7 @@ cdef extern from 'ptbox.h' nogil:
     cdef int PTBOX_EVENT_PROTECTION
     cdef int PTBOX_EVENT_PTRACE_ERROR
     cdef int PTBOX_EVENT_UPDATE_FAIL
+    cdef int PTBOX_EVENT_INITIAL_EXEC
 
     cdef int PTBOX_EXIT_NORMAL
     cdef int PTBOX_EXIT_PROTECTION
@@ -122,6 +123,7 @@ cdef extern from 'helper.h' nogil:
         int fd_4_
         int abi_for_seccomp
         int *seccomp_handlers
+        unsigned long cpu_affinity_mask
 
     void cptbox_closefrom(int lowfd)
     int cptbox_child_run(child_config *)
@@ -133,6 +135,7 @@ cdef extern from 'helper.h' nogil:
         PTBOX_SPAWN_FAIL_SECCOMP
         PTBOX_SPAWN_FAIL_TRACEME
         PTBOX_SPAWN_FAIL_EXECVE
+        PTBOX_SPAWN_FAIL_SETAFFINITY
 
     int _memory_fd_create "memory_fd_create"()
     int _memory_fd_seal "memory_fd_seal"(int fd)
@@ -426,7 +429,9 @@ cdef class Process:
     cdef public unsigned long _child_memory, _child_address, _child_personality
     cdef public unsigned int _cpu_time
     cdef public int _nproc, _fsize
+    cdef public unsigned long _cpu_affinity_mask
     cdef unsigned long _max_memory
+    cdef unsigned long _init_nvcsw, _init_nivcsw
 
     cpdef Debugger create_debugger(self):
         return Debugger(self)
@@ -438,6 +443,8 @@ cdef class Process:
         self._fsize = -1
         self._nproc = -1
         self._signal = 0
+        self._cpu_affinity_mask = 0
+        self._init_nvcsw = self._init_nivcsw = 0
 
         self.debugger = self.create_debugger()
         self.process = new pt_process(self.debugger.thisptr)
@@ -454,6 +461,8 @@ cdef class Process:
         return self._callback(syscall)
 
     cdef int _event_handler(self, int event, unsigned long param) nogil:
+        cdef const rusage *usage
+
         if not PTBOX_FREEBSD and (event == PTBOX_EVENT_EXITING or event == PTBOX_EVENT_SIGNAL):
             self._max_memory = get_memory(self.process.getpid()) or self._max_memory
         if event == PTBOX_EVENT_PROTECTION:
@@ -471,6 +480,10 @@ cdef class Process:
             if param == SIGXCPU:
                 with gil:
                     self._cpu_time_exceeded()
+        if event == PTBOX_EVENT_INITIAL_EXEC:
+            usage = self.process.getrusage()
+            self._init_nvcsw = usage.ru_nvcsw
+            self._init_nivcsw = usage.ru_nivcsw
         return 0
 
     cpdef _handler(self, abi, syscall, handler):
@@ -501,6 +514,7 @@ cdef class Process:
             config.nproc = self._nproc
             config.fsize = self._fsize
             config.personality = self._child_personality
+            config.cpu_affinity_mask = self._cpu_affinity_mask
             config.file = file
             config.dir = chdir
             config.stdin_ = self._child_stdin
@@ -576,6 +590,11 @@ cdef class Process:
         if memory > 0:
             self._max_memory = memory
         return self._max_memory or self.process.getrusage().ru_maxrss
+
+    @property
+    def context_switches(self):
+        cdef const rusage *usage = self.process.getrusage()
+        return (usage.ru_nvcsw - self._init_nvcsw, usage.ru_nivcsw - self._init_nivcsw)
 
     @property
     def signal(self):

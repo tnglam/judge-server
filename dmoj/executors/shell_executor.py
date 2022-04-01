@@ -1,7 +1,8 @@
 import os
 import shutil
-import sys
 
+from dmoj.cptbox.filesystem_policies import ExactFile
+from dmoj.cptbox.isolate import DeniedSyscall, protection_fault
 from dmoj.executors.script_executor import ScriptExecutor
 
 
@@ -16,7 +17,7 @@ class ShellExecutor(ScriptExecutor):
         return list(map(shutil.which, self.get_shell_commands()))
 
     def get_fs(self):
-        return super().get_fs() + self.get_allowed_exec()
+        return super().get_fs() + list(map(ExactFile, self.get_allowed_exec()))
 
     def get_allowed_syscalls(self):
         return super().get_allowed_syscalls() + ['fork', 'waitpid', 'wait4']
@@ -27,12 +28,11 @@ class ShellExecutor(ScriptExecutor):
         sec = super().get_security(launch_kwargs)
         allowed = set(self.get_allowed_exec())
 
-        def handle_execve(debugger):
-            path = sec.get_full_path(debugger, debugger.readstr(debugger.uarg0))
-            if path in allowed:
-                return True
-            print('Not allowed to use command:', path, file=sys.stderr)
-            return False
+        def handle_execve(debugger) -> None:
+            path = sec.get_full_path_unnormalized(debugger, debugger.readstr(debugger.uarg0))
+            path = '/' + os.path.normpath(path).lstrip('/')
+            if path not in allowed:
+                raise DeniedSyscall(protection_fault, f'Not allowed to use command: {path}')
 
         sec[sys_execve] = handle_execve
         sec[sys_eaccess] = sec[sys_access]

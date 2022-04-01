@@ -214,6 +214,7 @@ class ProblemConfig(ConfigNode):
                     'output_limit_length': 25165824,
                     'binary_data': False,
                     'short_circuit': True,
+                    'dependencies': [],
                     'points': 1,
                     'symlinks': {},
                     'meta': meta,
@@ -226,10 +227,15 @@ class BatchedTestCase:
         self.config = config
         self.batch_no = batch_no
         self.points = config.points
+        self.dependencies = config.dependencies
         self.batched_cases = cases
         if any(isinstance(case, BatchedTestCase) for case in self.batched_cases):
             raise InvalidInitException('nested batches')
         self.problem = problem
+        if any(dependency >= batch_no for dependency in self.dependencies):
+            raise InvalidInitException('dependencies depends on non-earlier batch')
+        if any(dependency < 1 for dependency in self.dependencies):
+            raise InvalidInitException('dependencies must be positive integers')
 
     def __str__(self):
         return 'BatchedTestCase{cases=%s}' % str(self.batched_cases)
