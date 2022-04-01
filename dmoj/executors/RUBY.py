@@ -1,7 +1,6 @@
 import os
-import re
 
-from dmoj.cptbox.filesystem_policies import ExactFile
+from dmoj.cptbox.filesystem_policies import ExactDir, ExactFile, RecursiveDir
 from dmoj.executors.script_executor import ScriptExecutor
 
 
@@ -10,7 +9,9 @@ class Executor(ScriptExecutor):
     address_grace = 65536
     test_program = 'puts gets'
     nproc = -1
-    command_paths = ['ruby2.%d' % i for i in reversed(range(0, 8))] + ['ruby2%d' % i for i in reversed(range(0, 8))]
+    command_paths = (
+        ['ruby3.0'] + ['ruby2.%d' % i for i in reversed(range(0, 8))] + ['ruby2%d' % i for i in reversed(range(0, 8))]
+    )
     syscalls = ['thr_set_name', 'eventfd2', 'specialfd']
     fs = [ExactFile('/proc/self/loginuid')]
 
@@ -18,11 +19,11 @@ class Executor(ScriptExecutor):
         fs = super().get_fs()
         home = self.runtime_dict.get('%s_home' % self.get_executor_name().lower())
         if home is not None:
-            fs.append(re.escape(home))
+            fs.append(RecursiveDir(home))
             components = home.split('/')
             components.pop()
             while components and components[-1]:
-                fs.append(re.escape('/'.join(components)) + '$')
+                fs.append(ExactDir('/'.join(components)))
                 components.pop()
         return fs
 

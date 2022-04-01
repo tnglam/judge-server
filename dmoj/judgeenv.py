@@ -1,4 +1,5 @@
 import argparse
+import logging
 import os
 import ssl
 from operator import itemgetter
@@ -46,6 +47,8 @@ env = ConfigNode(
         # Directory to use as temporary submission storage, system default
         # (e.g. /tmp) if left blank.
         'tempdir': None,
+        # CPU affinity (as a list of 0-indexed CPU IDs) to run submissions on
+        'submission_cpu_affinity': None,
     },
     dynamic=False,
 )
@@ -54,6 +57,7 @@ _root = os.path.dirname(__file__)
 log_file = server_host = server_port = no_ansi = skip_self_test = no_watchdog = problem_regex = case_regex = None
 cli_history_file = cert_store = api_listen = None
 secure = no_cert_check = False
+log_level = logging.DEBUG
 
 startup_warnings: List[str] = []
 cli_command: List[str] = []
@@ -63,7 +67,7 @@ exclude_executors: Set[str] = set()
 
 
 def load_env(cli=False, testsuite=False):  # pragma: no cover
-    global problem_dirs, only_executors, exclude_executors, log_file, server_host, server_port, no_ansi, no_ansi_emu, skip_self_test, env, startup_warnings, no_watchdog, problem_regex, case_regex, api_listen, secure, no_cert_check, cert_store, problem_watches, cli_history_file, cli_command
+    global problem_dirs, only_executors, exclude_executors, log_file, server_host, server_port, no_ansi, no_ansi_emu, skip_self_test, env, startup_warnings, no_watchdog, problem_regex, case_regex, api_listen, secure, no_cert_check, cert_store, problem_watches, cli_history_file, cli_command, log_level
 
     if cli:
         description = 'Starts a shell for interfacing with a local judge instance.'
@@ -91,6 +95,15 @@ def load_env(cli=False, testsuite=False):  # pragma: no cover
         type=str,
         default='~/.dmojrc',
         help='file to load judge configurations from (default: ~/.dmojrc)',
+    )
+
+    parser.add_argument(
+        '-d',
+        '--debug',
+        action='store_const',
+        const=logging.DEBUG,
+        default=logging.INFO,
+        dest='log_level',
     )
 
     if not cli:
@@ -137,6 +150,7 @@ def load_env(cli=False, testsuite=False):  # pragma: no cover
     no_ansi = args.no_ansi
     skip_self_test = args.skip_self_test
     no_watchdog = True if cli else args.no_watchdog
+    log_level = args.log_level
     if not cli:
         api_listen = (args.api_host, args.api_port) if args.api_port else None
 

@@ -1,19 +1,15 @@
 import hashlib
 import os
 import pty
-import struct
-import sys
 import tempfile
-from typing import Any, Dict, IO, List, Optional, Sequence
+from typing import Any, Dict, IO, List, Optional, Sequence, Tuple, Union
 
-from dmoj.cptbox import IsolateTracer, TracedPopen
-from dmoj.cptbox._cptbox import AT_FDCWD, Debugger
-from dmoj.cptbox.filesystem_policies import ExactFile, FilesystemAccessRule, RecursiveDir
-from dmoj.cptbox.handlers import ACCESS_EFAULT, ACCESS_EPERM, ALLOW
-from dmoj.cptbox.syscalls import *
-from dmoj.cptbox.tracer import AdvancedDebugger
+
+from dmoj.cptbox import TracedPopen
+from dmoj.cptbox.compiler_isolate import CompilerIsolateTracer
+from dmoj.cptbox.filesystem_policies import FilesystemAccessRule
 from dmoj.error import CompileError, OutputLimitExceeded
-from dmoj.executors.base_executor import BASE_FILESYSTEM, BASE_WRITE_FILESYSTEM, BaseExecutor, ExecutorMeta
+from dmoj.executors.base_executor import BaseExecutor, ExecutorMeta
 from dmoj.judgeenv import env
 from dmoj.utils.communicate import safe_communicate
 from dmoj.utils.error import print_protection_fault
@@ -64,164 +60,6 @@ class _CompiledExecutorMeta(ExecutorMeta):
         return obj
 
 
-UTIME_OMIT = (1 << 30) - 2
-
-
-class CompilerIsolateTracer(IsolateTracer):
-    def __init__(self, tmpdir, read_fs, write_fs, *args, **kwargs):
-        read_fs += BASE_FILESYSTEM + [
-            RecursiveDir(tmpdir),
-            ExactFile('/bin/strip'),
-            RecursiveDir('/usr/x86_64-linux-gnu'),
-        ]
-        write_fs += BASE_WRITE_FILESYSTEM + [RecursiveDir(tmpdir)]
-        super().__init__(read_fs, *args, write_fs=write_fs, **kwargs)
-
-        self.update(
-            {
-                # Process spawning system calls
-                sys_fork: ALLOW,
-                sys_vfork: ALLOW,
-                sys_execve: ALLOW,
-                sys_getcpu: ALLOW,
-                sys_getpgid: ALLOW,
-                # Directory system calls
-                sys_mkdir: self.check_file_access('mkdir', 0, is_write=True),
-                sys_mkdirat: self.check_file_access_at('mkdirat', is_write=True),
-                sys_rmdir: self.check_file_access('rmdir', 0, is_write=True),
-                # Linking system calls
-                sys_link: self.check_file_access('link', 1, is_write=True),
-                sys_linkat: self.check_file_access_at('linkat', argument=3, is_write=True),
-                sys_unlink: self.check_file_access('unlink', 0, is_write=True),
-                sys_unlinkat: self.check_file_access_at('unlinkat', is_write=True),
-                sys_symlink: self.check_file_access('symlink', 1, is_write=True),
-                # Miscellaneous other filesystem system calls
-                sys_chdir: self.check_file_access('chdir', 0),
-                sys_chmod: self.check_file_access('chmod', 0, is_write=True),
-                sys_utimensat: self.do_utimensat,
-                sys_umask: ALLOW,
-                sys_flock: ALLOW,
-                sys_fsync: ALLOW,
-                sys_fadvise64: ALLOW,
-                sys_fchmodat: self.check_file_access_at('fchmodat', is_write=True),
-                sys_fchmod: self.do_fchmod,
-                sys_fallocate: ALLOW,
-                sys_ftruncate: ALLOW,
-                sys_rename: self.do_rename,
-                sys_renameat: self.do_renameat,
-                # I/O system calls
-                sys_readv: ALLOW,
-                sys_pwrite64: ALLOW,
-                sys_sendfile: ALLOW,
-                # Event loop system calls
-                sys_epoll_create: ALLOW,
-                sys_epoll_create1: ALLOW,
-                sys_epoll_ctl: ALLOW,
-                sys_epoll_wait: ALLOW,
-                sys_epoll_pwait: ALLOW,
-                sys_timerfd_settime: ALLOW,
-                sys_eventfd2: ALLOW,
-                sys_waitid: ALLOW,
-                sys_wait4: ALLOW,
-                # Network system calls, we don't sandbox these
-                sys_socket: ALLOW,
-                sys_socketpair: ALLOW,
-                sys_connect: ALLOW,
-                sys_setsockopt: ALLOW,
-                sys_getsockname: ALLOW,
-                sys_sendmmsg: ALLOW,
-                sys_recvfrom: ALLOW,
-                sys_sendto: ALLOW,
-                # Miscellaneous other system calls
-                sys_msync: ALLOW,
-                sys_clock_nanosleep: ALLOW,
-                sys_memfd_create: ALLOW,
-                sys_rt_sigsuspend: ALLOW,
-            }
-        )
-
-        # FreeBSD-specific syscalls
-        if 'freebsd' in sys.platform:
-            self.update(
-                {
-                    sys_rfork: ALLOW,
-                    sys_procctl: ALLOW,
-                    sys_cap_rights_limit: ALLOW,
-                    sys_posix_fadvise: ALLOW,
-                    sys_posix_fallocate: ALLOW,
-                    sys_setrlimit: ALLOW,
-                    sys_cap_ioctls_limit: ALLOW,
-                    sys_cap_fcntls_limit: ALLOW,
-                    sys_cap_enter: ALLOW,
-                    sys_utimes: self.check_file_access('utimes', 0),
-                }
-            )
-
-    def do_utimensat(self, debugger: AdvancedDebugger) -> bool:
-        timespec = struct.Struct({32: '=ii', 64: '=QQ'}[debugger.address_bits])
-
-        # Emulate https://github.com/torvalds/linux/blob/v5.14/fs/utimes.c#L152-L161
-        times_ptr = debugger.uarg2
-        if times_ptr:
-            try:
-                buffer = debugger.readbytes(times_ptr, timespec.size * 2)
-            except OSError:
-                return ACCESS_EFAULT(debugger)
-
-            times = list(timespec.iter_unpack(buffer))
-            if times[0][1] == UTIME_OMIT and times[1][1] == UTIME_OMIT:
-                debugger.syscall = -1
-
-                def on_return():
-                    debugger.result = 0
-
-                debugger.on_return(on_return)
-                return True
-
-        # Emulate https://github.com/torvalds/linux/blob/v5.14/fs/utimes.c#L142-L143
-        if debugger.uarg0 != AT_FDCWD and not debugger.uarg1:
-            path = self._getfd_pid(debugger.tid, debugger.uarg0)
-            return True if self.write_fs_jail.check(path) else ACCESS_EPERM(debugger)
-
-        return self.check_file_access_at('utimensat')(debugger)
-
-    def do_fchmod(self, debugger: Debugger) -> bool:
-        path = self._getfd_pid(debugger.tid, debugger.uarg0)
-        return True if self.write_fs_jail.check(path) else ACCESS_EPERM(debugger)
-
-    def do_rename(self, debugger: Debugger) -> bool:
-        old_path, old_path_error = self.read_path('rename', debugger, debugger.uarg0)
-        if old_path_error is not None:
-            return old_path_error
-
-        new_path, new_path_error = self.read_path('rename', debugger, debugger.uarg1)
-        if new_path_error is not None:
-            return new_path_error
-
-        if not self._file_access_check(old_path, debugger, is_write=True, is_open=False):
-            return ACCESS_EPERM(debugger)
-        if not self._file_access_check(new_path, debugger, is_write=True, is_open=False):
-            return ACCESS_EPERM(debugger)
-
-        return True
-
-    def do_renameat(self, debugger: Debugger) -> bool:
-        old_path, old_path_error = self.read_path('renameat', debugger, debugger.uarg1)
-        if old_path_error is not None:
-            return old_path_error
-
-        new_path, new_path_error = self.read_path('renameat', debugger, debugger.uarg3)
-        if new_path_error is not None:
-            return new_path_error
-
-        if not self._file_access_check(old_path, debugger, is_write=True, is_open=False, dirfd=debugger.uarg0):
-            return ACCESS_EPERM(debugger)
-        if not self._file_access_check(new_path, debugger, is_write=True, is_open=False, dirfd=debugger.uarg2):
-            return ACCESS_EPERM(debugger)
-
-        return True
-
-
 class CompiledExecutor(BaseExecutor, metaclass=_CompiledExecutorMeta):
     executable_size = env.compiler_size_limit * 1024
     compiler_time_limit = env.compiler_time_limit
@@ -234,6 +72,10 @@ class CompiledExecutor(BaseExecutor, metaclass=_CompiledExecutorMeta):
 
     compiler_read_fs: Sequence[FilesystemAccessRule] = []
     compiler_write_fs: Sequence[FilesystemAccessRule] = []
+    compiler_syscalls: Sequence[Union[str, Tuple[str, Any]]] = []
+
+    # List of directories required by the compiler to be present, typically for writing to
+    compiler_required_dirs: List[str] = []
 
     def __init__(self, problem_id: str, source_code: bytes, *args, **kwargs) -> None:
         super().__init__(problem_id, source_code, **kwargs)
@@ -249,6 +91,13 @@ class CompiledExecutor(BaseExecutor, metaclass=_CompiledExecutorMeta):
         with open(self._code, 'wb') as fo:
             fo.write(utf8bytes(source_code))
 
+        for path in self.compiler_required_dirs:
+            path = os.path.expanduser(path)
+            try:
+                os.mkdir(path, mode=0o775)
+            except FileExistsError:
+                pass
+
     def get_compile_args(self) -> List[str]:
         raise NotImplementedError()
 
@@ -257,6 +106,10 @@ class CompiledExecutor(BaseExecutor, metaclass=_CompiledExecutorMeta):
 
     def get_compile_popen_kwargs(self) -> Dict[str, Any]:
         return {}
+
+    def get_compiler_security(self):
+        sec = CompilerIsolateTracer(tmpdir=self._dir, read_fs=self.compiler_read_fs, write_fs=self.compiler_write_fs)
+        return self._add_syscalls(sec, self.compiler_syscalls)
 
     def create_compile_process(self, args: List[str]) -> TracedPopen:
         # Some languages may insist on providing certain functionality (e.g. colored highlighting of errors) if they
@@ -277,7 +130,7 @@ class CompiledExecutor(BaseExecutor, metaclass=_CompiledExecutorMeta):
             [utf8bytes(a) for a in args],
             **{
                 'executable': utf8bytes(args[0]),
-                'security': CompilerIsolateTracer(self._dir, self.compiler_read_fs, self.compiler_write_fs),
+                'security': self.get_compiler_security(),
                 'stderr': _slave,
                 'stdout': _slave,
                 'stdin': _slave,
@@ -288,7 +141,7 @@ class CompiledExecutor(BaseExecutor, metaclass=_CompiledExecutorMeta):
                 'time': self.compiler_time_limit or 0,
                 'memory': 0,
                 **self.get_compile_popen_kwargs(),
-            }
+            },
         )
 
         class io_error_wrapper:

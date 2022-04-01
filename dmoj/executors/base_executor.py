@@ -20,7 +20,7 @@ from dmoj.utils.ansi import print_ansi
 from dmoj.utils.error import print_protection_fault
 from dmoj.utils.unicode import utf8bytes, utf8text
 
-version_cache: Dict[str, List[Tuple[str, Optional[Tuple[int, ...]]]]] = {}
+version_cache: Dict[str, List[Tuple[str, Tuple[int, ...]]]] = {}
 
 if os.path.isdir('/usr/home'):
     USR_DIR = [RecursiveDir(f'/usr/{d}') for d in os.listdir('/usr') if d != 'home' and os.path.isdir(f'/usr/{d}')]
@@ -187,6 +187,10 @@ class BaseExecutor(metaclass=ExecutorMeta):
         result.max_memory = process.max_memory or 0.0
         result.execution_time = process.execution_time or 0.0
         result.wall_clock_time = process.wall_clock_time or 0.0
+        result.context_switches = process.context_switches or (0, 0)
+        result.runtime_version = ', '.join(
+            f'{runtime} {".".join(map(str, version))}' for runtime, version in self.get_runtime_versions()
+        )
 
         if process.is_ir:
             result.result_flag |= Result.IR
@@ -204,8 +208,8 @@ class BaseExecutor(metaclass=ExecutorMeta):
     def parse_feedback_from_stderr(self, stderr: bytes, process: TracedPopen) -> str:
         return ''
 
-    def _add_syscalls(self, sec: IsolateTracer) -> IsolateTracer:
-        for item in self.get_allowed_syscalls():
+    def _add_syscalls(self, sec: IsolateTracer, handlers: List[Union[str, Tuple[str, Any]]]) -> IsolateTracer:
+        for item in handlers:
             if isinstance(item, tuple):
                 name, handler = item
             else:
@@ -219,9 +223,9 @@ class BaseExecutor(metaclass=ExecutorMeta):
             read_fs=self.get_fs(),
             write_fs=self.get_write_fs(),
             path_case_fixes=launch_kwargs.get('path_case_fixes', []),
-            path_case_insensitive_whitelist=launch_kwargs.get('path_case_insensitive_whitelist', []),
+            path_whitelist=launch_kwargs.get('path_whitelist', []),
         )
-        return self._add_syscalls(sec)
+        return self._add_syscalls(sec, self.get_allowed_syscalls())
 
     def get_fs(self) -> List[FilesystemAccessRule]:
         assert self._dir is not None
@@ -274,8 +278,8 @@ class BaseExecutor(metaclass=ExecutorMeta):
 
         if 'path_case_fixes' not in kwargs:
             kwargs['path_case_fixes'] = []
-        if 'path_case_insensitive_whitelist' not in kwargs:
-            kwargs['path_case_insensitive_whitelist'] = []
+        if 'path_whitelist' not in kwargs:
+            kwargs['path_whitelist'] = []
 
         stdin, stdout = None, None
         if isinstance(kwargs.get('file_io'), ConfigNode):
@@ -293,14 +297,14 @@ class BaseExecutor(metaclass=ExecutorMeta):
                 input = os.path.abspath(os.path.join(self._dir, file_io['input']))
                 create_symlink('/dev/fd/3', input)
                 kwargs['path_case_fixes'].append(input)
-                kwargs['path_case_insensitive_whitelist'].append(input)
+                kwargs['path_whitelist'].append(input)
 
             if isinstance(file_io.get('output'), str):
                 stdout = FILE_IO_PIPE
                 output = os.path.abspath(os.path.join(self._dir, file_io['output']))
                 create_symlink('/dev/fd/4', output)
                 kwargs['path_case_fixes'].append(output)
-                kwargs['path_case_insensitive_whitelist'].append(output)
+                kwargs['path_whitelist'].append(output)
 
         for src, dst in kwargs.get('symlinks', {}).items():
             src = os.path.abspath(os.path.join(self._dir, src))
@@ -308,7 +312,7 @@ class BaseExecutor(metaclass=ExecutorMeta):
 
         agent = self._file('setbufsize.so')
         shutil.copyfile(setbufsize_path, agent)
-        env = {
+        child_env = {
             # Forward LD_LIBRARY_PATH for systems (e.g. Android Termux) that require
             # it to find shared libraries
             'LD_LIBRARY_PATH': os.environ.get('LD_LIBRARY_PATH', ''),
@@ -316,7 +320,7 @@ class BaseExecutor(metaclass=ExecutorMeta):
             'CPTBOX_STDOUT_BUFFER_SIZE': kwargs.get('stdout_buffer_size'),
             'CPTBOX_STDERR_BUFFER_SIZE': kwargs.get('stderr_buffer_size'),
         }
-        env.update(self.get_env())
+        child_env.update(self.get_env())
 
         executable = self.get_executable()
         assert executable is not None
@@ -333,10 +337,11 @@ class BaseExecutor(metaclass=ExecutorMeta):
             stdin=stdin or kwargs.get('stdin'),
             stdout=stdout or kwargs.get('stdout'),
             stderr=kwargs.get('stderr'),
-            env=env,
+            env=child_env,
             cwd=utf8bytes(self._dir),
             nproc=self.get_nproc(),
             fsize=self.fsize,
+            cpu_affinity=env.submission_cpu_affinity,
         )
 
     @classmethod
@@ -381,13 +386,14 @@ class BaseExecutor(metaclass=ExecutorMeta):
                 cls.get_runtime_versions()
                 usage = f'[{proc.execution_time:.3f}s, {proc.max_memory} KB]'
                 print_ansi(f'{["#ansi[Failed](red|bold) ", "#ansi[Success](green|bold)"][res]} {usage:<19}', end=' ')
-
-                runtime_version: List[Tuple[str, str]] = []
-                for runtime, version in cls.get_runtime_versions():
-                    assert version is not None
-                    runtime_version.append((runtime, '.'.join(map(str, version))))
-
-                print_ansi(', '.join(['#ansi[%s](cyan|bold) %s' % v for v in runtime_version]))
+                print_ansi(
+                    ', '.join(
+                        [
+                            f'#ansi[{runtime}](cyan|bold) {".".join(map(str, version))}'
+                            for runtime, version in cls.get_runtime_versions()
+                        ]
+                    )
+                )
             if stdout.strip() != test_message and error_callback:
                 error_callback('Got unexpected stdout output:\n' + utf8text(stdout))
             if stderr:
@@ -414,12 +420,12 @@ class BaseExecutor(metaclass=ExecutorMeta):
         return [(cls.command, command)]
 
     @classmethod
-    def get_runtime_versions(cls) -> List[Tuple[str, Optional[Tuple[int, ...]]]]:
+    def get_runtime_versions(cls) -> List[Tuple[str, Tuple[int, ...]]]:
         key = cls.get_executor_name()
         if key in version_cache:
             return version_cache[key]
 
-        versions: List[Tuple[str, Optional[Tuple[int, ...]]]] = []
+        versions: List[Tuple[str, Tuple[int, ...]]] = []
         for runtime, path in cls.get_versionable_commands():
             flags = cls.get_version_flags(runtime)
 
