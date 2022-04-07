@@ -33,7 +33,7 @@ def check(
     memory_limit=env['generator_memory_limit'],
     compiler_time_limit=env['generator_compiler_limit'],
     feedback=True,
-    flags=[],
+    flags=None,
     type='default',
     args_format_string=None,
     point_value=None,
@@ -42,6 +42,7 @@ def check(
     **kwargs,
 ) -> CheckerResult:
 
+    flags = flags or []
     if type == 'themis':
         # Actually it should be `defines` instead of `flags`
         # but using `defines` requires more changes

@@ -47,15 +47,15 @@ class IsolateTracer(dict):
         *,
         read_fs: Sequence[FilesystemAccessRule],
         write_fs: Sequence[FilesystemAccessRule],
-        path_case_fixes=[],
-        path_whitelist=[],
+        path_case_fixes=None,
+        path_whitelist=None,
     ):
         super().__init__()
         self.read_fs_jail = self._compile_fs_jail(read_fs)
         self.write_fs_jail = self._compile_fs_jail(write_fs)
 
-        self._path_case_fixes = path_case_fixes
-        self._path_whitelist = path_whitelist
+        self._path_case_fixes = path_case_fixes or []
+        self._path_whitelist = path_whitelist or []
 
         if sys.platform.startswith('freebsd'):
             self._getcwd_pid = lambda pid: utf8text(bsd_get_proc_cwd(pid))
