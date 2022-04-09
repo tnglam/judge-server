@@ -93,6 +93,8 @@ https://raw.githubusercontent.com/VNOI-Admin/judge-server/master/asset/scratch_t
             result.result_flag |= Result.RTE
 
     def parse_feedback_from_stderr(self, stderr, process):
+        if not stderr:
+            return ''
         log = utf8text(stderr, 'replace')
         if b'scratch-vm encountered an error' in stderr:
             log = log.replace('scratch-vm encountered an error: ', '').strip()
