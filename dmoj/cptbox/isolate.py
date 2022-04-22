@@ -174,6 +174,7 @@ class IsolateTracer(dict):
                 sys_time: ALLOW,
                 sys_prlimit64: self.handle_prlimit,
                 sys_getdents64: ALLOW,
+                sys_rseq: ALLOW,
             }
         )
 
