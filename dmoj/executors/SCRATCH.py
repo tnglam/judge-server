@@ -73,7 +73,7 @@ https://raw.githubusercontent.com/VNOI-Admin/judge-server/master/asset/scratch_t
             raise CompileError('Memory Limit Exceeded while validating Scratch file')
         if proc.returncode != 0:
             if proc.returncode == 1 and b'Not a valid Scratch file' in stderr:
-                raise CompileError('Not a valid Scratch file')
+                raise CompileError(stderr)
             else:
                 raise InternalError('Unknown error while validating Scratch file')
 
