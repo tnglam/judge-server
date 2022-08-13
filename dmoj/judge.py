@@ -505,6 +505,7 @@ class JudgeWorker:
 
                         # result.case.points will always positive, since we only cache cases that have non-zero points
                         result.points = case.points * result.points / result.case.points
+                        result.case = case
 
                     # If the submission was killed due to a user-initiated abort, any result is meaningless.
                     if self._abort_requested:
