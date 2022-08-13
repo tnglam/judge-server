@@ -3,6 +3,7 @@ import shutil
 import subprocess
 
 from dmoj.cptbox import TracedPopen
+from dmoj.cptbox.filesystem_policies import ExactFile
 from dmoj.error import CompileError, InternalError
 from dmoj.executors.script_executor import ScriptExecutor
 from dmoj.result import Result
@@ -33,6 +34,9 @@ https://raw.githubusercontent.com/VNOI-Admin/judge-server/master/asset/scratch_t
     def __init__(self, problem_id, source_code, **kwargs):
         super().__init__(problem_id, source_code, **kwargs)
         self.meta = kwargs.get('meta', {})
+
+    def get_fs(self):
+        return super().get_fs() + [ExactFile('/etc/ssl/openssl.cnf'), ExactFile(self.runtime_dict['scratch-run'])]
 
     def validate_file(self, filename):
         # Based on PlatformExecutorMixin.launch
