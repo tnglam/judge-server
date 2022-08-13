@@ -2,8 +2,10 @@ FROM dmoj/runtimes-tier1
 
 ARG TAG=master
 
-RUN apt-get update && \
-	apt-get install -y --no-install-recommends unzip jq openjdk-17-jdk-headless && \
+RUN echo deb http://deb.debian.org/debian/ bullseye main > /etc/apt/sources.list.d/bullseye.list && \
+	apt-get update && \
+	apt-get install -y -t bullseye --no-install-recommends openjdk-17-jdk-headless openjdk-17-jre-headless && \
+	apt-get install -y --no-install-recommends unzip jq && \
 	rm -rf /var/lib/apt/lists/*
 
 # Install scratch-run + pypy + kotlin
