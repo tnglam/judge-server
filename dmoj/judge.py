@@ -430,10 +430,6 @@ class JudgeWorker:
                 if ipc_recv_thread.is_alive():
                     logger.error('Judge IPC recv thread is still alive after timeout, shutting worker down anyway!')
 
-            # FIXME(tbrindus): we need to do this because cleaning up temporary directories happens on __del__, which
-            # won't get called if we exit the process right now (so we'd leak all files created by the grader). This
-            # should be refactored to have an explicit `cleanup()` or similar, rather than relying on refcounting
-            # working out.
             self.grader = None
 
     def _grade_cases(self) -> Generator[Tuple[IPC, tuple], None, None]:
