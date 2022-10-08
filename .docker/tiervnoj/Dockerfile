@@ -2,10 +2,8 @@ FROM dmoj/runtimes-tier1
 
 ARG TAG=master
 
-RUN echo deb http://deb.debian.org/debian/ bullseye main > /etc/apt/sources.list.d/bullseye.list && \
-	apt-get update && \
-	apt-get install -y -t bullseye --no-install-recommends openjdk-17-jdk-headless openjdk-17-jre-headless && \
-	apt-get install -y --no-install-recommends unzip jq && \
+RUN apt-get update && \
+	apt-get install -y --no-install-recommends openjdk-19-jdk-headless openjdk-19-jre-headless unzip jq && \
 	rm -rf /var/lib/apt/lists/*
 
 # Install scratch-run + pypy + kotlin
@@ -17,6 +15,7 @@ RUN ARCH=$([ $(uname -m) = "x86_64" ] && echo "amd64" || echo "arm64") && \
 	if [ "$(arch)" = x86_64 ]; then PYPY_ARCH=linux64; else PYPY_ARCH="$(arch)"; fi && \
 	mkdir /opt/pypy2 && curl -L "$(curl https://www.pypy.org/download.html | grep "/pypy2.*$PYPY_ARCH" | head -n1 | cut -d'"' -f4 | sed "s/-portable//")" | \
 	tar xj -C /opt/pypy2 --strip-components=1 && /opt/pypy2/bin/pypy -mcompileall && \
+	chmod a+rx /opt/pypy2/lib /opt/pypy2/lib/*.so* && \
 	rm -f /opt/pypy2/bin/python* && \
 	mkdir /opt/pypy3 && curl -L "$(curl https://www.pypy.org/download.html | grep "/pypy3.*$PYPY_ARCH" | head -n1 | cut -d'"' -f4 | sed "s/-portable//")" | \
 	tar xj -C /opt/pypy3 --strip-components=1 && /opt/pypy3/bin/pypy -mcompileall && \
