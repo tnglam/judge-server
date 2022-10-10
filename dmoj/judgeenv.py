@@ -166,7 +166,7 @@ def load_env(cli=False, testsuite=False):  # pragma: no cover
     is_docker = bool(os.getenv('DMOJ_IN_DOCKER'))
     if is_docker:
         if not cli:
-            api_listen = api_listen or ('0.0.0.0', 9998)
+            api_listen = api_listen or ('0.0.0.0', 15001)
 
         with open('/judge-runtime-paths.yml', 'rb') as runtimes_file:
             env.update(yaml.safe_load(runtimes_file))
