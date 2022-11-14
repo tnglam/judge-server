@@ -32,7 +32,7 @@ class BridgedInteractiveGrader(StandardGrader):
             self._interactor_time_limit,
             self._interactor_memory_limit,
             feedback='',
-            extended_feedback=utf8text(stderr),
+            extended_feedback=utf8text(stderr, 'replace'),
             name='interactor',
             stderr=stderr,
         )

@@ -22,16 +22,16 @@ def utf8bytes(maybe_text):
 
 
 @overload
-def utf8text(maybe_bytes: AnyStr, errors='ignore') -> str:
+def utf8text(maybe_bytes: AnyStr, errors='strict') -> str:
     pass
 
 
 @overload
-def utf8text(maybe_bytes: None, errors='ignore') -> None:
+def utf8text(maybe_bytes: None, errors='strict') -> None:
     pass
 
 
-def utf8text(maybe_bytes, errors='ignore') -> Optional[str]:
+def utf8text(maybe_bytes, errors='strict') -> Optional[str]:
     if maybe_bytes is None:
         return None
     if isinstance(maybe_bytes, str):

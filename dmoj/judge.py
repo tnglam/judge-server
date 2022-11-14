@@ -205,7 +205,7 @@ class Judge:
         is_sc = result.result_flag & Result.SC
         colored_codes = ['#ansi[%s](%s|bold)' % ('--' if x == 'SC' else x, Result.COLORS_BYID[x]) for x in codes]
         colored_aux_codes = '{%s}' % ', '.join(colored_codes[1:]) if len(codes) > 1 else ''
-        colored_feedback = '(#ansi[%s](|underline)) ' % utf8text(result.feedback) if result.feedback else ''
+        colored_feedback = '(#ansi[%s](|underline)) ' % utf8text(result.feedback, 'replace') if result.feedback else ''
         if is_sc:
             case_info = ''
         else:

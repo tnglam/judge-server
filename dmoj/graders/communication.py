@@ -85,8 +85,8 @@ class CommunicationGrader(StandardGrader):
             case.points,
             self._manager_time_limit,
             self._manager_memory_limit,
-            feedback=utf8text(result.proc_output),
-            extended_feedback=utf8text(self._manager_stderr),
+            feedback=utf8text(result.proc_output, 'replace'),
+            extended_feedback=utf8text(self._manager_stderr, 'replace'),
             name='manager',
             stderr=self._manager_stderr,
         )
