@@ -273,7 +273,7 @@ class Judge:
         if self.packet_manager:
             self.packet_manager.close()
 
-    def log_internal_error(self, exc: BaseException = None, message: str = None) -> None:
+    def log_internal_error(self, exc: Optional[BaseException] = None, message: Optional[str] = None) -> None:
         if not message:
             # If exc exists, raise it so that sys.exc_info() is populated with its data.
             if exc:
@@ -450,7 +450,7 @@ class JudgeWorker:
             if hasattr(binary, 'warning') and binary.warning is not None:
                 yield IPC.COMPILE_MESSAGE, (binary.warning,)
 
-        yield IPC.GRADING_BEGIN, (self.grader.is_pretested,)
+        yield IPC.GRADING_BEGIN, (self.grader.run_pretests_only,)
 
         flattened_cases: List[Tuple[Optional[int], Union[TestCase, BatchedTestCase]]] = []
         batch_number = 0
