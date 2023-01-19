@@ -24,6 +24,7 @@ import runpy, sys
 del sys.argv[0]
 runpy.run_path(sys.argv[0], run_name='__main__')
 """
+    syscalls = ['clock_nanosleep']
     address_grace = 131072
     ext = 'py'
 

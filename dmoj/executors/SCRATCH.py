@@ -17,14 +17,7 @@ class Executor(ScriptExecutor):
     command = 'scratch-run'
     nproc = -1
     address_grace = 1048576
-    syscalls = [
-        'eventfd2',
-        'epoll_create1',
-        'epoll_ctl',
-        'epoll_wait',
-        'epoll_pwait',
-        'statx',
-    ]
+    syscalls = ['eventfd2', 'statx']
     check_time = 10  # 10 seconds
     check_memory = 262144  # 256MB of RAM
     test_program = """\

@@ -59,7 +59,6 @@ class JavaExecutor(SingleDigitVersionMixin, CompiledExecutor):
     fsize = 1048576  # Allow 1 MB for writing crash log.
     address_grace = 786432
     syscalls = [
-        'pread64',
         'clock_nanosleep',
         'socketpair',
         ('procctl', handle_procctl),

@@ -11,9 +11,6 @@ class Executor(ScriptExecutor):
     syscalls = [
         'capget',
         'eventfd2',
-        'newselect',
-        'sched_yield',
-        'select',
         'setrlimit',
         'statx',
     ]
