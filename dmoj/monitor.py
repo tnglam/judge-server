@@ -6,6 +6,7 @@ from urllib.request import urlopen
 from dmoj import judgeenv
 from dmoj.judgeenv import get_problem_watches, startup_warnings
 from dmoj.utils.ansi import print_ansi
+from dmoj.utils.glob_ext import find_glob_root
 
 try:
     from watchdog.observers import Observer
@@ -73,7 +74,8 @@ class Monitor:
 
             self._handler = SendProblemsHandler(self._refresher)
             self._monitor = Observer()
-            for dir in get_problem_watches():
+
+            for dir in set(map(find_glob_root, get_problem_watches())):
                 self._monitor.schedule(self._handler, dir, recursive=True)
                 logger.info('Scheduled for monitoring: %s', dir)
         else:
