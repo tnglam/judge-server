@@ -15,10 +15,12 @@ RUN ARCH=$([ $(uname -m) = "x86_64" ] && echo "amd64" || echo "arm64") && \
 
 RUN mkdir /judge /problems && cd /judge && \
 	curl -L https://github.com/VNOI-Admin/judge-server/archive/"${TAG}".tar.gz | tar -xz --strip-components=1 && \
-	pip3 install -e . && \
-	python3 setup.py develop && \
+	python3 -m venv --prompt=DMOJ /env && \
+	/env/bin/pip3 install cython && \
+	/env/bin/pip3 install -e . && \
+	/env/bin/python3 setup.py develop && \
 	HOME=~judge . ~judge/.profile && \
-	runuser -u judge -w PATH -- dmoj-autoconf -V > /judge-runtime-paths.yml && \
+	runuser -u judge -w PATH -- /env/dmoj-autoconf -V > /judge-runtime-paths.yml && \
 	echo '  crt_x86_in_lib32: true' >> /judge-runtime-paths.yml && \
 	curl -L https://raw.githubusercontent.com/VNOI-Admin/testlib/master/testlib.h -o /usr/include/testlib.h && \
 	g++ -std=c++17 -Wall -DONLINE_JUDGE -O2 -fmax-errors=5 -march=native -s /usr/include/testlib.h && \
