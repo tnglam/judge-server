@@ -21,7 +21,7 @@ RUN ARCH=$([ $(uname -m) = "x86_64" ] && echo "amd64" || echo "arm64") && \
 	tar xj -C /opt/pypy3 --strip-components=1 && /opt/pypy3/bin/pypy -mcompileall && \
 	rm -f /opt/pypy3/bin/python* && \
 	curl -L -okotlin.zip "$(curl -s https://api.github.com/repos/JetBrains/kotlin/releases | \
-		jq -r '[.[] | select(.prerelease | not) | .assets | flatten | .[] | select(.name | startswith("kotlin-compiler")) | .browser_download_url][0]')" && \
+		jq -r '[.[] | select(.prerelease | not) | .assets | flatten | .[] | select((.name | startswith("kotlin-compiler")) and (.name | endswith(".zip"))) | .browser_download_url][0]')" && \
 	unzip kotlin.zip && mv kotlinc /opt/kotlin && rm kotlin.zip
 
 ENV PATH="/opt/kotlin/bin:/opt/pypy2/bin:/opt/pypy3/bin:${PATH}"
