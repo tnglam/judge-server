@@ -5,6 +5,7 @@ import os
 import signal
 import sys
 import threading
+import time
 import traceback
 from enum import Enum
 from http.server import HTTPServer
@@ -100,6 +101,11 @@ class Judge:
             try:
                 clear_problem_dirs_cache()
                 self.packet_manager.supported_problems_packet(get_supported_problems_and_mtimes())
+
+                # When copying large test file, updater_signal can be set multiple times in very short burst
+                # (e.g. 10 times during 0.2s). Meanwhile, bridged can take up to 1 seconds to process updates.
+                # Let's just wait a few seconds to avoid spamming bridged.
+                time.sleep(3)
             except Exception:
                 log.exception('Failed to update problems.')
 
