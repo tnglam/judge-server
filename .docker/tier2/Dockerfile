@@ -1,4 +1,4 @@
-FROM dmoj/runtimes-tier2
+FROM vnoj/runtimes-tier2
 
 ARG TAG=master
 
