@@ -92,7 +92,7 @@ class TestConfigGlobs(unittest.TestCase):
             ex_cases = ['p2', 'p3', 'doesnotexist']
 
             for problem in ex_cases:
-                self.assertRaises(KeyError, judgeenv.get_problem_root, problem)
+                self.assertIsNone(judgeenv.get_problem_root(problem))
 
     def tearDown(self):
         self.root.cleanup()
