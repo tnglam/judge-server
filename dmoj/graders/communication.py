@@ -116,7 +116,7 @@ class CommunicationGrader(StandardGrader):
         self._manager_time_limit = self.num_processes * (self.problem.time_limit + 1.0)
         self._manager_memory_limit = self.handler_data.manager.memory_limit or env['generator_memory_limit']
 
-        self._manager_proc = self.manager_binary.launch(
+        self._current_proc = self._manager_proc = self.manager_binary.launch(
             *manager_args,
             time=self._manager_time_limit,
             memory=self._manager_memory_limit,
