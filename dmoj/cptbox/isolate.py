@@ -2,7 +2,7 @@ import logging
 import os
 import sys
 from enum import Enum
-from typing import Any, Callable, Mapping, Sequence
+from typing import Any, Callable, List, Mapping, Sequence
 
 from dmoj.cptbox._cptbox import AT_FDCWD, Debugger, bsd_get_proc_cwd, bsd_get_proc_fdno
 from dmoj.cptbox.filesystem_policies import FilesystemAccessRule, FilesystemPolicy
@@ -45,8 +45,8 @@ class IsolateTracer(dict):
     def __init__(
         self,
         *,
-        read_fs: Sequence[FilesystemAccessRule],
-        write_fs: Sequence[FilesystemAccessRule],
+        read_fs: List[FilesystemAccessRule],
+        write_fs: List[FilesystemAccessRule],
         path_case_fixes=None,
         path_whitelist=None,
     ):

@@ -11,14 +11,14 @@ from enum import Enum
 from http.server import HTTPServer
 from itertools import groupby
 from operator import itemgetter
-from typing import Any, Callable, Dict, Generator, List, NamedTuple, Optional, Set, Tuple, Union
+from typing import Any, Callable, Dict, Generator, List, NamedTuple, Optional, Set, Tuple
 
 from dmoj import packet
 from dmoj.control import JudgeControlRequestHandler
 from dmoj.error import CompileError
 from dmoj.judgeenv import env, get_supported_problems_and_mtimes, startup_warnings
 from dmoj.monitor import Monitor
-from dmoj.problem import BatchedTestCase, Problem, TestCase
+from dmoj.problem import BaseTestCase, BatchedTestCase, Problem, TestCase
 from dmoj.result import Result
 from dmoj.utils import builtin_int_patch
 from dmoj.utils.ansi import ansi_style, print_ansi, strip_ansi
@@ -47,7 +47,10 @@ class IPC(Enum):
     REQUEST_ABORT = 'REQUEST-ABORT'
 
 
-IPC_TEARDOWN_TIMEOUT = 5  # seconds
+# This needs to be at least as large as the timeout for the largest compiler time limit, but we don't enforce that here.
+# (Otherwise, aborting during a compilation that exceeds this time limit would result in a `TimeoutError` IE instead of
+# a `CompileError`.)
+IPC_TIMEOUT = 60  # seconds
 
 
 logger = logging.getLogger(__name__)
@@ -307,6 +310,7 @@ class JudgeWorker:
     def __init__(self, submission: Submission) -> None:
         self.submission = submission
         self._abort_requested = False
+        self._sent_sigkill_to_worker_process = False
         # FIXME(tbrindus): marked Any pending grader cleanups.
         self.grader: Any = None
 
@@ -331,6 +335,10 @@ class JudgeWorker:
                 logger.error('Worker has not sent a message in %d seconds, assuming dead and killing.', recv_timeout)
                 self.worker_process.kill()
                 raise
+            except EOFError:
+                if self._sent_sigkill_to_worker_process:
+                    raise TimeoutError('worker did not exit in %d seconds, so it was killed' % IPC_TIMEOUT)
+                raise
             except Exception:
                 logger.error('Failed to read IPC message from worker!')
                 raise
@@ -341,16 +349,17 @@ class JudgeWorker:
             else:
                 yield ipc_type, data
 
-    def wait_with_timeout(self, timeout=IPC_TEARDOWN_TIMEOUT) -> None:
+    def wait_with_timeout(self) -> None:
         if self.worker_process and self.worker_process.is_alive():
             # Might be None if run was never called, or failed.
             try:
-                self.worker_process.join(timeout=timeout)
+                self.worker_process.join(timeout=IPC_TIMEOUT)
             except OSError:
                 logger.exception('Exception while waiting for worker to shut down, ignoring...')
             finally:
                 if self.worker_process.is_alive():
                     logger.error('Worker is still alive, sending SIGKILL!')
+                    self._sent_sigkill_to_worker_process = True
                     self.worker_process.kill()
 
     def request_abort_grading(self) -> None:
@@ -431,7 +440,7 @@ class JudgeWorker:
                 # We may have failed before sending the IPC.BYE down the connection, in which case the judge will never
                 # close its side of the connection -- so `ipc_recv_thread` will never exit. But we can't wait forever in
                 # this case, since we're blocking the main judge from proceeding.
-                ipc_recv_thread.join(timeout=IPC_TEARDOWN_TIMEOUT)
+                ipc_recv_thread.join(timeout=IPC_TIMEOUT)
                 if ipc_recv_thread.is_alive():
                     logger.error('Judge IPC recv thread is still alive after timeout, shutting worker down anyway!')
 
@@ -451,13 +460,13 @@ class JudgeWorker:
             yield IPC.COMPILE_ERROR, (error,)
             return
         else:
-            binary = self.grader.binary
-            if hasattr(binary, 'warning') and binary.warning is not None:
-                yield IPC.COMPILE_MESSAGE, (binary.warning,)
+            warning = getattr(self.grader.binary, 'warning', None)
+            if warning is not None:
+                yield IPC.COMPILE_MESSAGE, (warning,)
 
         yield IPC.GRADING_BEGIN, (self.grader.run_pretests_only,)
 
-        flattened_cases: List[Tuple[Optional[int], Union[TestCase, BatchedTestCase]]] = []
+        flattened_cases: List[Tuple[Optional[int], BaseTestCase]] = []
         batch_number = 0
         batch_dependencies: List[Set[int]] = []
         for case in self.grader.cases():
@@ -485,6 +494,7 @@ class JudgeWorker:
 
             for _, case in cases:
                 case_number += 1
+                assert isinstance(case, TestCase)
 
                 # Stop grading if we're short circuiting
                 if is_short_circuiting:
