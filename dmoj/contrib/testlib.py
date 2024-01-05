@@ -6,6 +6,7 @@ from dmoj.error import InternalError
 from dmoj.executors.base_executor import BaseExecutor
 from dmoj.result import CheckerResult
 from dmoj.utils.helper_files import parse_helper_file_error
+from dmoj.utils.unicode import utf8text
 
 if TYPE_CHECKING:
     from dmoj.cptbox import TracedPopen
@@ -56,7 +57,9 @@ class ContribModule(DefaultContribModule):
                 percentage = float(match.group(1))
 
                 if not 0.0 <= percentage <= 1.0:
-                    raise InternalError('Invalid point percentage: %s, must be between [0; 1]' % match.group(1))
+                    raise InternalError(
+                        'Invalid point percentage: %s, must be between [0; 1]' % utf8text(match.group(1))
+                    )
 
                 points = percentage * point_value
             else:
