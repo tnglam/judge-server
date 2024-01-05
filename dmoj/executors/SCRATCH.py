@@ -29,6 +29,11 @@ https://raw.githubusercontent.com/VNOI-Admin/judge-server/master/asset/scratch_t
         super().__init__(problem_id, source_code, **kwargs)
         self.meta = kwargs.get('meta', {})
 
+    def get_cmdline(self, **kwargs) -> List[str]:
+        command = self.get_command()
+        assert command is not None
+        return [command, self._code, '--buffer-stdout']
+
     def get_fs(self) -> List[FilesystemAccessRule]:
         return super().get_fs() + [ExactFile('/etc/ssl/openssl.cnf'), ExactFile(self.runtime_dict['scratch-run'])]
 
