@@ -6,7 +6,7 @@ from dmoj.citest import ci_test
 from dmoj.executors import get_available
 
 arch = platform.machine()
-ALLOW_FAIL = {'GASARM', 'OBJC', 'CLANGX', 'DART', 'HASK'}
+ALLOW_FAIL = {'GASARM', 'OBJC'}
 EXECUTORS = get_available()
 
 if arch == 'aarch64':
