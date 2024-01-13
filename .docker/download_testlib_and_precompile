@@ -13,6 +13,7 @@ sed -i '/^#include <cstdio>/a#include <cstdint>' /usr/include/testlib_themis_cms
 mkdir -p /usr/include/testlib_themis_cms.h.gch
 g++ -std=c++17 $FLAGS -DTHEMIS /usr/include/testlib_themis_cms.h -o /usr/include/testlib_themis_cms.h.gch/themis
 g++ -std=c++17 $FLAGS -DCMS    /usr/include/testlib_themis_cms.h -o /usr/include/testlib_themis_cms.h.gch/cms
+g++ -std=c++17 $FLAGS          /usr/include/testlib_themis_cms.h -o /usr/include/testlib_themis_cms.h.gch/testlib
 
 # Precompile bits/stdc++.h
 IFS=$'\n' files=( $(find /usr/include/ -name stdc++.h) );
