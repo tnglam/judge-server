@@ -2,7 +2,7 @@ checker:
   name: bridged
   args:
     files: checker.cpp
-    lang: CPP11
+    lang: CPP17
     type: testlib
     treat_checker_points_as_percentage: true
 test_cases:

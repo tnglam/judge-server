@@ -2,6 +2,7 @@ checker:
   name: bridged
   args:
     files: checker.cpp
+    lang: CPP17
     type: themis
 test_cases:
 - {in: post.inp, out: post.out, points: 1}
