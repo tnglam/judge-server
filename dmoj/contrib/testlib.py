@@ -56,12 +56,12 @@ class ContribModule(DefaultContribModule):
             if treat_checker_points_as_percentage:
                 percentage = float(match.group(1))
 
-                if not 0.0 <= percentage <= 1.0:
+                if not 0 <= percentage <= 100:
                     raise InternalError(
-                        'Invalid point percentage: %s, must be between [0; 1]' % utf8text(match.group(1))
+                        'Invalid point percentage: %s, must be between [0; 100]' % utf8text(match.group(1))
                     )
 
-                points = percentage * point_value
+                points = percentage * point_value / 100
             else:
                 points = float(match.group(1))
 
