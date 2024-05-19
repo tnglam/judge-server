@@ -405,7 +405,9 @@ class IsolateTracer(dict):
 
         if normalized != real:
             proc_dir = f'/proc/{debugger.tid}'
-            if real.startswith(proc_dir):
+            if real == proc_dir:
+                real = '/proc/self'
+            elif real.startswith(proc_dir):
                 real = os.path.join('/proc/self', os.path.relpath(real, proc_dir))
 
             if not fs_jail.check(real):
