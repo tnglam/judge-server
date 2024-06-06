@@ -1,5 +1,5 @@
 <h1 align="center">
-  <img src="https://avatars2.githubusercontent.com/u/6934864?v=3&s=1000" width="120px">
+  <img src="https://github.com/DMOJ/online-judge/blob/master/logo.png?raw=true" width="120px">
   <br>
   DMOJ Judge
 </h1>
@@ -56,6 +56,7 @@ Supported languages include:
 The judge can also grade in the languages listed below:
 
 * Ada
+* Algol 68
 * AWK
 * Brain\*\*\*\*
 * COBOL
