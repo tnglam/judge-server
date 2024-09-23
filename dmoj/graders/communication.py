@@ -228,7 +228,7 @@ class CommunicationGrader(StandardGrader):
             filenames = [files]
         elif isinstance(files.unwrap(), list):
             filenames = list(files.unwrap())
-        problem_root = get_problem_root(self.problem.id)
+        problem_root = get_problem_root(self.problem.id, self.problem.storage_namespace)
         assert problem_root is not None
         filenames = [os.path.join(problem_root, f) for f in filenames]
         flags = self.handler_data.manager.get('flags', [])

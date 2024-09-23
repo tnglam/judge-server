@@ -50,6 +50,7 @@ class BaseTestCase:
 
 class Problem:
     id: str
+    storage_namespace: Optional[str]
     time_limit: float
     memory_limit: int
     meta: ConfigNode
@@ -58,8 +59,11 @@ class Problem:
     problem_data: 'ProblemDataManager'
     config: 'ProblemConfig'
 
-    def __init__(self, problem_id: str, time_limit: float, memory_limit: int, meta: dict) -> None:
+    def __init__(
+        self, problem_id: str, time_limit: float, memory_limit: int, meta: dict, storage_namespace: Optional[str] = None
+    ) -> None:
         self.id = problem_id
+        self.storage_namespace = storage_namespace
         self.time_limit = time_limit
         self.memory_limit = memory_limit
         self.meta = ConfigNode(meta)
@@ -68,7 +72,7 @@ class Problem:
         self._testcase_counter = 0
 
         # Cache root dir so that we don't need to scan all roots (potentially very slow on networked mount).
-        root_dir = get_problem_root(problem_id)
+        root_dir = get_problem_root(problem_id, storage_namespace)
         assert root_dir is not None
         self.root_dir = root_dir
         self.problem_data = ProblemDataManager(self.root_dir)
@@ -386,7 +390,7 @@ class TestCase(BaseTestCase):
         compiler_time_limit = env.generator_compiler_time_limit
         lang = None  # Default to C/C++
 
-        base = get_problem_root(self.problem.id)
+        base = get_problem_root(self.problem.id, self.problem.storage_namespace)
         assert base is not None
         filenames: Union[str, list]
         if isinstance(gen, str):
@@ -489,11 +493,14 @@ class TestCase(BaseTestCase):
         if not hasattr(checker, 'check') or not callable(checker.check):
             raise InvalidInitException('malformed checker: no check method found')
 
+        params['storage_namespace'] = self.problem.storage_namespace
+
         # Themis checker need input name and output name
         if self.config['in']:
             params['input_name'] = self.config['in']
         if self.config['out']:
             params['output_name'] = self.config['out']
+
         return partial(checker.check, **params)
 
     def free_data(self) -> None:
