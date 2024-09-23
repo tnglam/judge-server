@@ -12,6 +12,7 @@ import yaml
 from dmoj.config import ConfigNode
 from dmoj.utils import pyyaml_patch  # noqa: F401, imported for side effect
 from dmoj.utils.ansi import print_ansi
+from dmoj.utils.glob_ext import find_glob_root
 from dmoj.utils.unicode import utf8text
 
 problem_globs: List[str] = []
@@ -73,6 +74,10 @@ cli_command: List[str] = []
 only_executors: Set[str] = set()
 exclude_executors: Set[str] = set()
 
+_problem_root_cache: Dict[str, str] = {}
+_problem_roots_cache: Optional[List[str]] = None
+_supported_problems_cache: Optional[List[Tuple[str, float]]] = None
+
 
 def load_env(cli: bool = False, testsuite: bool = False) -> None:  # pragma: no cover
     global problem_globs, only_executors, exclude_executors, log_file, server_host, server_port, no_ansi, no_ansi_emu, skip_self_test, env, startup_warnings, no_watchdog, problem_regex, case_regex, api_listen, secure, no_cert_check, cert_store, problem_watches, cli_history_file, cli_command, log_level
@@ -117,6 +122,7 @@ def load_env(cli: bool = False, testsuite: bool = False) -> None:  # pragma: no 
     if not cli:
         parser.add_argument('-l', '--log-file', help='log file to use')
         parser.add_argument('--no-watchdog', action='store_true', help='disable use of watchdog on problem directories')
+        parser.add_argument('--skip-first-scan', action='store_true', help='skip the first scan of problem directories')
         parser.add_argument(
             '-a',
             '--api-port',
@@ -224,15 +230,19 @@ def load_env(cli: bool = False, testsuite: bool = False) -> None:  # pragma: no 
             except re.error:
                 raise SystemExit('Invalid case regex')
 
-    # Populate cache and send warnings
-    get_supported_problems_and_mtimes()
+    skip_first_scan = False if cli else args.skip_first_scan
+    if not skip_first_scan:
+        # Populate cache and send warnings
+        get_supported_problems_and_mtimes()
+    else:
+        global _problem_roots_cache
+        global _supported_problems_cache
+        _problem_roots_cache = [str(root) for root in map(find_glob_root, problem_globs)]
+        _supported_problems_cache = []
 
 
 def get_problem_watches():
     return problem_watches
-
-
-_problem_root_cache: Dict[str, str] = {}
 
 
 def get_problem_root(problem_id) -> Optional[str]:
@@ -254,16 +264,10 @@ def get_problem_root(problem_id) -> Optional[str]:
     return _problem_root_cache[problem_id]
 
 
-_problem_roots_cache: Optional[List[str]] = None
-
-
 def get_problem_roots() -> List[str]:
     global _problem_roots_cache
     assert _problem_roots_cache is not None
     return _problem_roots_cache
-
-
-_supported_problems_cache = None
 
 
 def get_supported_problems_and_mtimes(warnings: bool = True, force_update: bool = False) -> List[Tuple[str, float]]:
