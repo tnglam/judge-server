@@ -419,7 +419,9 @@ class TestCase(BaseTestCase):
             filenames = [filenames]
 
         filenames = [os.path.abspath(os.path.join(base, name)) for name in filenames]
-        executor = compile_with_auxiliary_files(filenames, flags, lang, compiler_time_limit)
+        executor = compile_with_auxiliary_files(
+            self.problem.storage_namespace, filenames, flags, lang, compiler_time_limit
+        )
 
         # convert all args to str before launching; allows for smoother int passing
         assert args is not None

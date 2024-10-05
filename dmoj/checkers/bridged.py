@@ -17,7 +17,7 @@ def get_executor(problem_id, storage_namespace, files, flags, lang, compiler_tim
         filenames = list(files.unwrap())
 
     filenames = [os.path.join(get_problem_root(problem_id, storage_namespace), f) for f in filenames]
-    executor = compile_with_auxiliary_files(filenames, flags, lang, compiler_time_limit)
+    executor = compile_with_auxiliary_files(storage_namespace, filenames, flags, lang, compiler_time_limit)
 
     return executor
 

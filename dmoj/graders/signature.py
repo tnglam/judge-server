@@ -28,7 +28,11 @@ class SignatureGrader(StandardGrader):
             aux_sources[handler_data['header']] = header
             entry = entry_point
             return executors[self.language].Executor(
-                self.problem.id, entry, aux_sources=aux_sources, defines=['-DSIGNATURE_GRADER']
+                self.problem.id,
+                entry,
+                storage_namespace=self.problem.storage_namespace,
+                aux_sources=aux_sources,
+                defines=['-DSIGNATURE_GRADER'],
             )
         elif self.language in java_siggraders:
             aux_sources = {}
@@ -43,6 +47,8 @@ class SignatureGrader(StandardGrader):
                 entry = self.source
                 aux_sources[self.problem.id + '_lib'] = entry_point
 
-            return executors[self.language].Executor(self.problem.id, entry, aux_sources=aux_sources)
+            return executors[self.language].Executor(
+                self.problem.id, entry, storage_namespace=self.problem.storage_namespace, aux_sources=aux_sources
+            )
         else:
             raise InternalError('no valid runtime for signature grading %s found' % self.language)
