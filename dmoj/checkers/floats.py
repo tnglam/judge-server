@@ -28,7 +28,10 @@ def verify_relative(process_float: float, judge_float: float, epsilon: float) ->
 
 def error_relative(process_float: float, judge_float: float) -> float:
     absolute = abs(process_float - judge_float)
-    return abs(absolute / judge_float)
+    # if judge_float is too small, we return absolute error instead
+    if abs(judge_float) > 1e-9:
+        return abs(absolute / judge_float)
+    return absolute
 
 
 def verify_default(process_float: float, judge_float: float, epsilon: float) -> bool:
@@ -43,7 +46,7 @@ def verify_default(process_float: float, judge_float: float, epsilon: float) -> 
 
 def error_default(process_float: float, judge_float: float) -> float:
     absolute = abs(process_float - judge_float)
-    # if jude_float is too small, we return absolute error instead
+    # if judge_float is too small, we return absolute error instead
     if abs(judge_float) > 1e-9:
         return min(absolute, abs(absolute / judge_float))
     return absolute
