@@ -12,6 +12,7 @@ from dmoj.config import ConfigNode
 from dmoj.cptbox import FILE_IO_PIPE, IsolateTracer, TracedPopen, syscalls
 from dmoj.cptbox.filesystem_policies import ExactDir, ExactFile, FilesystemAccessRule, RecursiveDir
 from dmoj.cptbox.handlers import ALLOW
+from dmoj.cptbox.utils import MmapableIO
 from dmoj.error import InternalError
 from dmoj.judgeenv import env, skip_self_test
 from dmoj.result import Result
@@ -234,9 +235,12 @@ class BaseExecutor(metaclass=ExecutorMeta):
             sec[getattr(syscalls, f'sys_{name}')] = handler
         return sec
 
-    def get_security(self, launch_kwargs={}) -> IsolateTracer:
+    def get_security(self, launch_kwargs=None, extra_fs=None) -> IsolateTracer:
+        read_fs = self.get_fs()
+        if extra_fs:
+            read_fs += extra_fs
         sec = IsolateTracer(
-            read_fs=self.get_fs(),
+            read_fs=read_fs,
             write_fs=self.get_write_fs(),
             path_case_fixes=launch_kwargs.get('path_case_fixes', []),
             path_whitelist=launch_kwargs.get('path_whitelist', []),
@@ -309,9 +313,12 @@ class BaseExecutor(metaclass=ExecutorMeta):
             file_io = kwargs['file_io']
 
             if isinstance(file_io.get('input'), str):
-                stdin = FILE_IO_PIPE
+                passed_stdin = kwargs.get('stdin')
+                assert isinstance(passed_stdin, MmapableIO)
+
+                stdin = subprocess.PIPE
                 input = os.path.abspath(os.path.join(self._dir, file_io['input']))
-                create_symlink('/dev/fd/3', input)
+                create_symlink(passed_stdin.to_path(), input)
                 kwargs['path_case_fixes'].append(input)
                 kwargs['path_whitelist'].append(input)
 
@@ -343,7 +350,7 @@ class BaseExecutor(metaclass=ExecutorMeta):
         return TracedPopen(
             [utf8bytes(a) for a in self.get_cmdline(**kwargs) + list(args)],
             executable=utf8bytes(executable),
-            security=self.get_security(launch_kwargs=kwargs),
+            security=self.get_security(launch_kwargs=kwargs, extra_fs=kwargs.get('extra_fs')),
             address_grace=self.get_address_grace(),
             data_grace=self.data_grace,
             personality=self.personality,

@@ -392,7 +392,7 @@ class IsolateTracer(dict):
             return
 
         try:
-            same = normalized == real or os.path.samefile(projected, real)
+            same = normalized == real or real.startswith('/memfd:') or os.path.samefile(projected, real)
         except OSError:
             raise DeniedSyscall(ACCESS_ENOENT, f'Cannot stat, file: {file}, projected: {projected}, real: {real}')
 
@@ -415,7 +415,7 @@ class IsolateTracer(dict):
                 else:
                     real = os.path.join('/proc/self', relpath)
 
-            if not fs_jail.check(real):
+            if not real.startswith('/memfd:') and not fs_jail.check(real):
                 raise DeniedSyscall(ACCESS_EACCES, f'Denying {file}, real path {real}')
 
     def _fix_path_case(self, full_path: str, orig_path: str, debugger: Debugger, ptr: int) -> str:

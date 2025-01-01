@@ -3,6 +3,7 @@ import shlex
 import subprocess
 
 from dmoj.contrib import contrib_modules
+from dmoj.cptbox.filesystem_policies import ExactFile
 from dmoj.error import InternalError
 from dmoj.judgeenv import env, get_problem_root
 from dmoj.result import CheckerResult
@@ -28,6 +29,7 @@ def check(
     judge_input,
     problem_id,
     files,
+    case,
     lang='CPP17',
     time_limit=env['generator_time_limit'],
     memory_limit=env['generator_memory_limit'],
@@ -110,17 +112,25 @@ def check(
                 stderr=error,
             )
 
-    with mktemp(judge_input) as input_file, mktemp(process_output) as output_file, mktemp(judge_output) as answer_file:
+    with mktemp(process_output) as output_file, mktemp(judge_output) as answer_file:
+        input_path = case.input_data_io().to_path()
+
         args_format_string = args_format_string or contrib_modules[type].ContribModule.get_checker_args_format_string()
+
         checker_args = shlex.split(
             args_format_string.format(
-                input_file=shlex.quote(input_file.name),
+                input_file=shlex.quote(input_path),
                 output_file=shlex.quote(output_file.name),
                 answer_file=shlex.quote(answer_file.name),
             )
         )
         process = executor.launch(
-            *checker_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, memory=memory_limit, time=time_limit
+            *checker_args,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            memory=memory_limit,
+            time=time_limit,
+            extra_fs=[ExactFile(input_path)],
         )
 
         proc_output, error = process.communicate()

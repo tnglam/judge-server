@@ -106,7 +106,7 @@ class CommunicationGrader(StandardGrader):
             stderr=self._manager_stderr,
         )
 
-    def _launch_process(self, case: TestCase) -> None:
+    def _launch_process(self, case: TestCase, input_file=None) -> None:
         # Indices for the objects related to each user process
         indices = range(self.num_processes)
 
@@ -137,7 +137,7 @@ class CommunicationGrader(StandardGrader):
             *manager_args,
             time=self._manager_time_limit,
             memory=self._manager_memory_limit,
-            stdin=subprocess.PIPE,
+            stdin=input_file or subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
@@ -167,8 +167,8 @@ class CommunicationGrader(StandardGrader):
             os.close(stdin_fd)
             os.close(stdout_fd)
 
-    def _interact_with_process(self, case: TestCase, result: Result, input: bytes) -> bytes:
-        result.proc_output, self._manager_stderr = self._manager_proc.communicate(input)
+    def _interact_with_process(self, case: TestCase, result: Result) -> bytes:
+        result.proc_output, self._manager_stderr = self._manager_proc.communicate()
 
         self._manager_proc.wait()
         for _user_proc in self._user_procs:
