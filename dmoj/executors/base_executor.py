@@ -236,6 +236,7 @@ class BaseExecutor(metaclass=ExecutorMeta):
         return sec
 
     def get_security(self, launch_kwargs=None, extra_fs=None) -> IsolateTracer:
+        launch_kwargs = {} if launch_kwargs is None else launch_kwargs
         read_fs = self.get_fs()
         if extra_fs:
             read_fs += extra_fs
