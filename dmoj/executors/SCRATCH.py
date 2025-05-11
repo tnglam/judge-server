@@ -89,4 +89,4 @@ https://raw.githubusercontent.com/VNOI-Admin/judge-server/master/asset/scratch_t
             log = log.replace('scratch-vm encountered an error: ', '').strip()
             return '' if len(log) > 50 else log
         else:
-            raise InternalError(log)
+            return log[: 50]
