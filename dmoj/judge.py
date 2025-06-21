@@ -484,7 +484,7 @@ class JudgeWorker:
             import tempfile
             import os
             
-            with tempfile.NamedTemporaryFile(mode='w+', delete=False) as temp_input_file:
+            with tempfile.NamedTemporaryFile(mode='w', delete=False) as temp_input_file:
                 input_path = temp_input_file.name
                 temp_input_file.write(ide_input)
             try:
