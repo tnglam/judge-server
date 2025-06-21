@@ -461,7 +461,6 @@ class JudgeWorker:
         source = self.submission.source
         ide_input = self.submission.meta.get('ide_input', '')
 
-
         # Phần compile giống nhau cho cả 2 chế độ
         try:
             self.grader = problem.grader_class(
@@ -486,10 +485,8 @@ class JudgeWorker:
             import os
             
             with tempfile.NamedTemporaryFile(mode='w+', delete=False) as temp_input_file:
-                temp_input_file.write(ide_input)
-                temp_input_file.flush()
                 input_path = temp_input_file.name
-            
+                temp_input_file.write(ide_input)
             try:
                 # Cấu hình cho IDE mode
                 config = ConfigNode({
